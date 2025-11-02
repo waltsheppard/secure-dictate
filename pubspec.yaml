@@ -50,6 +50,9 @@ dependencies:
   uuid: ^4.4.0
   connectivity_plus: ^6.0.3
 
+dependency_overrides:
+  record_linux: ^0.7.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
