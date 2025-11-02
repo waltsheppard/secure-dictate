@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -6,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:record/record.dart' as record show Amplitude;
+import 'package:riverpod/riverpod.dart' show StateNotifier, StateNotifierProvider;
 import 'package:uuid/uuid.dart';
 
 import '../domain/dictation_record.dart';
@@ -334,11 +336,7 @@ class DictationController extends StateNotifier<DictationState> {
     if (!await file.exists()) {
       throw FileSystemException('File not found for checksum', path);
     }
-    final input = AccumulatorSink<Digest>();
-    final output = sha256.startChunkedConversion(input);
-    await file.openRead().forEach(output.add);
-    output.close();
-    final digest = input.events.single;
+    final digest = await sha256.bind(file.openRead()).first;
     return digest.toString();
   }
 
