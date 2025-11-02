@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -7,7 +6,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:record/record.dart' as record show Amplitude;
-import 'package:riverpod/riverpod.dart' show StateNotifier, StateNotifierProvider;
 import 'package:uuid/uuid.dart';
 
 import '../domain/dictation_record.dart';

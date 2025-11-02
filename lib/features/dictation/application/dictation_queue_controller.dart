@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:riverpod/riverpod.dart' show StateNotifier, StateNotifierProvider;
 
 import '../domain/dictation_upload.dart';
 import '../infrastructure/dictation_queue_worker.dart';

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:riverpod/riverpod.dart' show StateNotifier, StateNotifierProvider;
 
 import '../infrastructure/dictation_player.dart';
 
