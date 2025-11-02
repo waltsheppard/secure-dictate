@@ -57,7 +57,6 @@ class DefaultDictationRecorder implements DictationRecorder {
       config,
       path: filePath,
     );
-    _bindAmplitudeStream();
   }
 
   void _bindAmplitudeStream() {
@@ -96,7 +95,9 @@ class DefaultDictationRecorder implements DictationRecorder {
 
   @override
   Stream<record.Amplitude> onAmplitude() {
-    _bindAmplitudeStream();
+    if (_amplitudeController == null || _amplitudeSubscription == null) {
+      _bindAmplitudeStream();
+    }
     return _amplitudeController!.stream;
   }
 
