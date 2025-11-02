@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../domain/dictation_upload.dart';
 import '../infrastructure/dictation_queue_worker.dart';
