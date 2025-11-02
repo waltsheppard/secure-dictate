@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:authapp1/features/auth/auth.dart';
+import 'package:authapp1/features/dictation/presentation/dictation_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key, this.requiresContactVerification = false});
@@ -31,12 +32,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       final attributes = await Amplify.Auth.fetchUserAttributes();
       bool emailVerified = true;
-      bool phoneVerified = true;
+      final authConfig = ref.read(authConfigProvider);
+      bool phoneVerified = !authConfig.requirePhoneVerification;
       for (final attribute in attributes) {
         final key = attribute.userAttributeKey.key;
         if (key == 'email_verified') {
           emailVerified = attribute.value.toLowerCase() == 'true';
-        } else if (key == 'phone_number_verified') {
+        } else if (key == 'phone_number_verified' && authConfig.requirePhoneVerification) {
           phoneVerified = attribute.value.toLowerCase() == 'true';
         }
       }
@@ -88,30 +90,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+      body: SafeArea(
+        child: Column(
+          children: [
               if (_needsVerification)
-                Card(
-                  color: Theme.of(context).colorScheme.secondaryContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Text(
-                          'Verify your contact information',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'We still need you to confirm your email and phone number. '
-                          'Follow the verification links/code sent to your email and SMS, then refresh status.',
-                        ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                  child: Card(
+                    color: Theme.of(context).colorScheme.secondaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Verify your contact information',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            ref.read(authConfigProvider).requirePhoneVerification
+                                ? 'We still need you to confirm your email and phone number. '
+                                  'Follow the verification links/code sent to your email and SMS, then refresh status.'
+                                : 'We still need you to confirm your email address. '
+                                  'Follow the verification link sent to your email, then refresh status.',
+                          ),
                         const SizedBox(height: 12),
                         ElevatedButton(
                           onPressed: _checkingVerification ? null : _refreshVerification,
@@ -137,20 +140,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                 ),
-              const SizedBox(height: 24),
-              const Text(
-                'Welcome!',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () => _signOut(context),
-                icon: const Icon(Icons.logout),
-                label: const Text('Sign out'),
-              ),
-            ],
-          ),
+            Expanded(
+              child: const DictationBody(),
+            ),
+          ],
         ),
       ),
     );

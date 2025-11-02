@@ -33,6 +33,7 @@ EnvironmentConfig buildEnvironmentConfig(String? rawEnv) {
           rememberMeDefault: false,
           allowBiometricCredentialLogin: false,
           authMode: AuthMode.local,
+          requirePhoneVerification: true,
         ),
       );
     case AppEnvironment.prod:
@@ -43,12 +44,15 @@ EnvironmentConfig buildEnvironmentConfig(String? rawEnv) {
           rememberMeDefault: false,
           allowBiometricCredentialLogin: false,
           authMode: AuthMode.local,
+          requirePhoneVerification: true,
         ),
       );
     case AppEnvironment.dev:
       return EnvironmentConfig(
         environment: env,
-        authConfig: AuthConfig(),
+        authConfig: AuthConfig(
+          requirePhoneVerification: false,
+        ),
       );
   }
 }

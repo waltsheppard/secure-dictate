@@ -272,12 +272,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final attributes = await Amplify.Auth.fetchUserAttributes();
       bool emailVerified = true;
-      bool phoneVerified = true;
+      final authConfig = ref.read(authConfigProvider);
+      bool phoneVerified = !authConfig.requirePhoneVerification;
       for (final attribute in attributes) {
         final key = attribute.userAttributeKey.key;
         if (key == 'email_verified') {
           emailVerified = attribute.value.toLowerCase() == 'true';
-        } else if (key == 'phone_number_verified') {
+        } else if (key == 'phone_number_verified' && authConfig.requirePhoneVerification) {
           phoneVerified = attribute.value.toLowerCase() == 'true';
         }
       }

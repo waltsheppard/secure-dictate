@@ -1,7 +1,7 @@
-# AuthApp1
+# Secure Dictate
 
-AuthApp1 is a Flutter authentication client that integrates with AWS Cognito through Amplify.  
-This document captures the steps required to stand up the Amplify environment and wire the app to your Cognito user pool.
+Secure Dictate extends the original AuthApp1 authentication client with a HIPAA-oriented dictation workflow.  
+The app still integrates with AWS Cognito via Amplify for identity, and now layers in high-fidelity audio capture, offline-safe uploads to S3, and DynamoDB metadata synchronization.
 
 ## Prerequisites
 - Flutter 3.7.0 or newer (`flutter --version` to confirm)
@@ -13,7 +13,7 @@ This document captures the steps required to stand up the Amplify environment an
 ## 1. Clone & bootstrap the repo
 ```bash
 git clone <repo-url>
-cd authapp1
+cd secure-dictate
 flutter pub get
 ```
 
@@ -54,7 +54,37 @@ flutter pub get
 2. For apps with an App Client secret disabled (recommended for native apps), remove the `AppClientSecret` property completely.
 3. Confirm that the Cognito app client exposes `email`, `phone_number`, and the verification flags; if you make changes later, rerun `amplify pull` and update this file again.
 
-## 4. Platform-specific setup
+## 4. Dictation module overview
+- High-quality audio capture powered by the [`record`](https://pub.dev/packages/record) plugin (48 kHz WAV by default).
+- Playback handled through [`just_audio`](https://pub.dev/packages/just_audio).
+- Files are persisted to an app-private `dictations/` directory with SHA-256 checksums before upload.
+- Each dictation receives an incrementing sequence number and 12-character clinician-facing tag (`#000123 • ABCD34…`) that travels with the audio and metadata.
+- Offline queue stored locally (JSON-backed today; upgrade path to SQLite/Isar) ensures large files (≤100 MB) are never lost.
+- Once an upload succeeds, the worker deletes the local audio file and queue entry so only in-flight dictations remain on device.
+- Upload pipeline uses Amplify Storage (S3) plus Amplify API/AppSync for DynamoDB metadata writes.
+- Connectivity-aware worker retries failed uploads with exponential backoff; held dictations stay local until clinicians resume them.
+- See [`docs/dictation_architecture.md`](docs/dictation_architecture.md) for detailed component design.
+
+### Dictation screen controls
+| Control | Description |
+| --- | --- |
+| Record / Pause | Large toggle button to start/pause capture. |
+| Submit | Finalizes recording, enqueues it for upload, and triggers the sync worker. |
+| Hold / Resume Hold | Moves the dictation to a held state so it stays local until explicitly resumed. |
+| Delete | Discards the current dictation and removes local artifacts. |
+| Playback | Review the in-progress dictation before submitting. |
+
+### Additional dependencies
+Add these to your local environment before running the dictation build:
+- `amplify_storage_s3`, `amplify_api` (Amplify plugins for uploads + metadata)
+- `record`, `just_audio`, `path_provider`, `path`, `uuid`, `connectivity_plus`
+
+After updating `pubspec.yaml`, run:
+```bash
+flutter pub get
+```
+
+## 5. Platform-specific setup
 ### iOS
 - In `ios/Runner/Info.plist` add the following keys if missing:
   ```xml
@@ -73,26 +103,27 @@ flutter pub get
   <uses-permission android:name="android.permission.USE_FINGERPRINT" />
   ```
 
-## 5. Run the app
+## 6. Run the app
 ```bash
 flutter run
 ```
 - The splash screen configures Amplify automatically; on success, you should land on the login screen. Accounts are provisioned centrally—use the username/password provided by your administrator. First-time users will be prompted to set a new password and confirm their contact details.
 
-## 6. Managing environments
+## 7. Managing environments
 - Use `amplify env add` to create additional AWS environments (e.g., dev/stage/prod).
 - Pull backend updates from teammates with `amplify pull`.
 - After backend changes, confirm `lib/amplifyconfiguration.dart` reflects the latest values.
 
-## 7. Runtime configuration
+## 8. Runtime configuration
 - Authentication rules (email/phone regex, password length, default Remember Me) are centralized in `lib/config/app_environment.dart`.
+- For local testing the `dev` environment skips phone verification—only email must be confirmed. Flip `requirePhoneVerification` to `true` for dev (or run with `APP_ENV=staging|prod`) once SMS delivery is ready.
 - Select an environment at runtime with `--dart-define APP_ENV=<dev|staging|prod>`, e.g.:
   ```bash
   flutter run --dart-define APP_ENV=staging
   ```
   Each environment overrides the `AuthConfig` provided through Riverpod so future apps can tailor policies without touching UI code.
 
-## 8. Useful commands
+## 9. Useful commands
 | Command | Description |
 | --- | --- |
 | `amplify status` | Shows categories to be deployed |
@@ -100,7 +131,7 @@ flutter run
 | `amplify push` | Deploys the local backend changes |
 | `amplify pull --restore` | Restores backend environment configuration |
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 - **Amplify not configured**: Ensure `_AmplifyBootstrapper.ensureConfigured()` runs before `runApp` (already handled in `lib/main.dart`).
 - **`AmplifyAlreadyConfiguredException`**: Safe to ignore; the app protects against double configuration.
 - **Biometric sign-in fails**: Check that `local_auth` is correctly configured per platform and that the device supports biometrics.
@@ -113,7 +144,7 @@ flutter run
   - `.github/workflows/cd-android.yml` – manual deploy template with keystore + Play Store placeholders.
   - `.github/workflows/cd-ios.yml` – manual deploy template with signing asset placeholders.
 
-## 10. Security controls
+## 11. Security controls
 - **Device attestation**: The app blocks rooted/jailbroken, emulator, and mock-location devices (see `safe_device` checks in `lib/state/security_controller.dart`). For development builds (`flutter run`), the guard is relaxed; release builds enforce it.
 - **OS passcode/biometric enforcement**: On launch/resume the session gate (`lib/security/security_gate.dart`) requires LocalAuth to succeed with biometric or device passcode. Devices without a secure lock screen are rejected with remediation guidance.
 - **Idle session lock**: User interaction is monitored via `InactivityGuard`; after two minutes of inactivity the session locks and re-prompts for authentication. Backgrounding the app immediately locks the session.
@@ -123,7 +154,7 @@ flutter run
 - **Biometric quick sign-in**: By default biometrics simply unlock an existing remembered session; set `allowBiometricCredentialLogin` in `AuthConfig` to `true` if policy allows caching passwords for full biometric login.
 - **Federated login (optional)**: Switch `AuthConfig.authMode` to `AuthMode.saml` for environments that authenticate through Cognito Hosted UI + SAML IdPs (e.g., Microsoft Entra). The login screen swaps to a single "Sign in with Microsoft" button and hides the local password reset flow.
 
-## 11. User provisioning
+## 12. User provisioning
 - **Create users centrally** using the Cognito console, CLI (`amplify auth add-user`), or AdminCreateUser API. Supply email and phone so preprovisioned accounts match the app’s required attributes.
 - **Distribute temporary credentials** to clinicians and require them to set a new password at first login. The app already handles the `NEW_PASSWORD_REQUIRED` challenge during sign-in.
 - **Contact verification**: First login triggers an email/SMS code challenge; the home screen also reminds users to verify their contact info until both email and phone are confirmed. Administrators can resend verification codes from Cognito if needed.

@@ -10,6 +10,7 @@ class AuthConfig {
     this.rememberMeDefault = true,
     this.allowBiometricCredentialLogin = false,
     this.authMode = AuthMode.local,
+    this.requirePhoneVerification = true,
   })  : emailRegex = emailRegex ?? RegExp(r'^.+@.+\..+$'),
         phoneRegex = phoneRegex ?? RegExp(r'^\+[1-9]\d{7,14}$');
 
@@ -19,6 +20,7 @@ class AuthConfig {
   final bool rememberMeDefault;
   final bool allowBiometricCredentialLogin;
   final AuthMode authMode;
+  final bool requirePhoneVerification;
 
   bool get isFederatedLogin => authMode == AuthMode.saml;
 }
