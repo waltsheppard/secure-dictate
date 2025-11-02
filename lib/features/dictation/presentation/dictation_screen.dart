@@ -73,6 +73,7 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
             onPlay: playerController.play,
             onPause: playerController.pause,
             onSeek: playerController.seek,
+            onLoad: playerController.load,
           ),
           const SizedBox(height: 24),
           _ActionButtons(
@@ -246,6 +247,7 @@ class _PlaybackCard extends StatelessWidget {
     required this.onPlay,
     required this.onPause,
     required this.onSeek,
+    required this.onLoad,
   });
 
   final DictationState dictationState;
@@ -253,6 +255,7 @@ class _PlaybackCard extends StatelessWidget {
   final Future<void> Function() onPlay;
   final Future<void> Function() onPause;
   final Future<void> Function(Duration position) onSeek;
+  final Future<void> Function(String path) onLoad;
 
   @override
   Widget build(BuildContext context) {
@@ -299,9 +302,18 @@ class _PlaybackCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: !canInteract
                     ? null
-                    : () => unawaited(
-                          playerState.isPlaying ? onPause() : onPlay(),
-                        ),
+                    : () async {
+                        final currentPath = dictationState.filePath;
+                        if (currentPath != null && currentPath != playerState.filePath) {
+                          await onLoad(currentPath);
+                          await onSeek(Duration.zero);
+                        }
+                        if (playerState.isPlaying) {
+                          await onPause();
+                        } else {
+                          await onPlay();
+                        }
+                      },
                 icon: Icon(playerState.isPlaying ? Icons.pause : Icons.play_arrow),
                 label: Text(playerState.isPlaying ? 'Pause' : 'Play'),
               ),
