@@ -68,6 +68,7 @@ class DefaultDictationRecorder implements DictationRecorder {
       onError: (Object error, StackTrace stackTrace) {
         _amplitudeController?.addError(error, stackTrace);
       },
+      cancelOnError: true,
     );
   }
 
