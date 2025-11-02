@@ -61,7 +61,7 @@
 1. User hits **Record**: controller creates entry, starts recorder.
 2. **Pause/Resume** toggles capture without losing buffered audio.
 3. The active session is labeled in UI and metadata as `#<sequence> • <tag>` for cross-system traceability.
-4. **Hold** moves the dictation to `held` state (stays local; no upload attempts).
+4. **Hold** pauses the active dictation locally (no upload attempts) and lets clinicians resume recording later.
 5. **Delete** removes current dictation (wipes file + metadata).
 6. **Submit** stops recording (if active), enqueues for upload, and initiates sync worker.
 7. If backend unreachable, dictation remains queued; sync worker retries when connectivity returns.

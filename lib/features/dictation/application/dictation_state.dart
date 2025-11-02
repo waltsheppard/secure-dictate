@@ -10,7 +10,6 @@ class DictationState {
     required this.fileSizeBytes,
     required this.isSubmitting,
     required this.isHeld,
-    required this.amplitudeLevel,
     required this.errorMessage,
     required this.hasQueuedUpload,
     required this.uploadStatus,
@@ -25,7 +24,6 @@ class DictationState {
   final int fileSizeBytes;
   final bool isSubmitting;
   final bool isHeld;
-  final double amplitudeLevel;
   final String? errorMessage;
   final bool hasQueuedUpload;
   final DictationUploadStatus? uploadStatus;
@@ -40,7 +38,6 @@ class DictationState {
         fileSizeBytes: 0,
         isSubmitting: false,
         isHeld: false,
-        amplitudeLevel: 0,
         errorMessage: null,
         hasQueuedUpload: false,
         uploadStatus: null,
@@ -56,7 +53,6 @@ class DictationState {
     int? fileSizeBytes,
     bool? isSubmitting,
     bool? isHeld,
-    double? amplitudeLevel,
     String? errorMessage,
     bool? hasQueuedUpload,
     DictationUploadStatus? uploadStatus,
@@ -74,7 +70,6 @@ class DictationState {
       fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       isHeld: isHeld ?? this.isHeld,
-      amplitudeLevel: amplitudeLevel ?? this.amplitudeLevel,
       errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
       hasQueuedUpload: hasQueuedUpload ?? this.hasQueuedUpload,
       uploadStatus: uploadStatus ?? this.uploadStatus,
@@ -89,8 +84,13 @@ class DictationState {
   bool get canSubmit =>
       !isSubmitting &&
       filePath != null &&
-      (status == DictationSessionStatus.ready || status == DictationSessionStatus.paused);
-  bool get canHold => filePath != null && !isSubmitting;
+      (status == DictationSessionStatus.ready ||
+          status == DictationSessionStatus.paused ||
+          status == DictationSessionStatus.holding);
+  bool get canHold =>
+      filePath != null &&
+      !isSubmitting &&
+      (status == DictationSessionStatus.recording || status == DictationSessionStatus.paused);
   bool get canDelete => dictationId != null;
   bool get canPlayback =>
       filePath != null &&

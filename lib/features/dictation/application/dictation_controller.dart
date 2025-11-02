@@ -6,7 +6,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
-import 'package:record/record.dart' as record show Amplitude;
 import 'package:uuid/uuid.dart';
 
 import '../domain/dictation_record.dart';
@@ -21,7 +20,6 @@ class DictationController extends StateNotifier<DictationState> {
   DictationController(this._ref) : super(DictationState.initial());
 
   final Ref _ref;
-  StreamSubscription<record.Amplitude>? _amplitudeSubscription;
   Timer? _durationTimer;
   final Stopwatch _stopwatch = Stopwatch();
   Duration _accumulatedDuration = Duration.zero;
@@ -52,7 +50,6 @@ class DictationController extends StateNotifier<DictationState> {
       ..reset()
       ..start();
     _startDurationTimer();
-    _listenToAmplitude();
     state = state.copyWith(
       status: DictationSessionStatus.recording,
       dictationId: dictationId,
@@ -81,7 +78,10 @@ class DictationController extends StateNotifier<DictationState> {
 
   Future<void> pauseRecording() async {
     if (!state.canPause) return;
-    await _recorder.pauseRecording();
+    if (state.status == DictationSessionStatus.recording) {
+      await _recorder.pauseRecording();
+    }
+    _durationTimer?.cancel();
     _stopwatch.stop();
     _accumulatedDuration += _stopwatch.elapsed;
     _stopwatch.reset();
@@ -101,6 +101,7 @@ class DictationController extends StateNotifier<DictationState> {
     _stopwatch
       ..reset()
       ..start();
+    _startDurationTimer();
     state = state.copyWith(
       status: DictationSessionStatus.recording,
       record: state.record?.copyWith(
@@ -112,7 +113,8 @@ class DictationController extends StateNotifier<DictationState> {
 
   Future<void> stopRecording() async {
     if (state.status != DictationSessionStatus.recording &&
-        state.status != DictationSessionStatus.paused) {
+        state.status != DictationSessionStatus.paused &&
+        state.status != DictationSessionStatus.holding) {
       return;
     }
     final path = await _recorder.stopRecording() ?? state.filePath;
@@ -128,6 +130,7 @@ class DictationController extends StateNotifier<DictationState> {
       filePath: path,
       duration: duration,
       fileSizeBytes: fileSize,
+      isHeld: false,
       record: state.record?.copyWith(
         status: DictationSessionStatus.ready,
         duration: duration,
@@ -135,7 +138,6 @@ class DictationController extends StateNotifier<DictationState> {
         updatedAt: DateTime.now().toUtc(),
       ),
     );
-    await _cancelAmplitude();
   }
 
   Future<void> submitCurrent({Map<String, dynamic> metadata = const {}}) async {
@@ -170,6 +172,7 @@ class DictationController extends StateNotifier<DictationState> {
       await _queueWorker.upsert(upload);
       state = state.copyWith(
         isSubmitting: false,
+        isHeld: false,
         hasQueuedUpload: true,
         uploadStatus: upload.status,
         currentUpload: upload,
@@ -193,64 +196,49 @@ class DictationController extends StateNotifier<DictationState> {
 
   Future<void> holdCurrent() async {
     if (!state.canHold) return;
-    await stopRecording();
-    final path = state.filePath;
-    final dictationId = state.dictationId;
-    if (path == null || dictationId == null) return;
-    final file = File(path);
-    if (!await file.exists()) {
-      state = state.copyWith(errorMessage: 'Cannot hold: dictation file missing.');
+    if (state.status != DictationSessionStatus.recording &&
+        state.status != DictationSessionStatus.paused) {
       return;
     }
-    final size = await file.length();
-    final checksum = await _computeSha256(path);
-    final upload = DictationUpload(
-      id: dictationId,
-      filePath: path,
-      status: DictationUploadStatus.held,
-      createdAt: state.record?.createdAt ?? DateTime.now().toUtc(),
-      updatedAt: DateTime.now().toUtc(),
-      fileSizeBytes: size,
-      duration: state.duration,
-      metadata: state.currentUpload?.metadata ?? const {},
-      checksumSha256: checksum,
-      sequenceNumber: state.record?.sequenceNumber ?? 0,
-      tag: state.record?.tag ?? '',
-    );
-    await _queueWorker.upsert(upload);
-    _notifyQueueChanged();
+    if (state.status == DictationSessionStatus.recording) {
+      await _recorder.pauseRecording();
+    }
+    _durationTimer?.cancel();
+    _stopwatch.stop();
+    _accumulatedDuration += _stopwatch.elapsed;
+    _stopwatch.reset();
+    await _updateMetrics();
     state = state.copyWith(
+      status: DictationSessionStatus.holding,
       isHeld: true,
-      hasQueuedUpload: true,
-      uploadStatus: DictationUploadStatus.held,
-      currentUpload: upload,
+      hasQueuedUpload: false,
+      uploadStatus: null,
+      clearCurrentUpload: true,
       record: state.record?.copyWith(
         status: DictationSessionStatus.holding,
+        duration: _accumulatedDuration,
         updatedAt: DateTime.now().toUtc(),
-        checksumSha256: checksum,
       ),
     );
   }
 
   Future<void> resumeHeld() async {
-    final upload = state.currentUpload;
-    if (upload == null || upload.status != DictationUploadStatus.held) return;
-    await _queueWorker.markHeld(upload.id, held: false);
-    _notifyQueueChanged();
-    final updated = upload.copyWith(
-      status: DictationUploadStatus.pending,
-      updatedAt: DateTime.now().toUtc(),
-    );
+    if (!state.isHeld || state.status != DictationSessionStatus.holding) {
+      return;
+    }
+    await _recorder.resumeRecording();
+    _stopwatch
+      ..reset()
+      ..start();
+    _startDurationTimer();
     state = state.copyWith(
+      status: DictationSessionStatus.recording,
       isHeld: false,
-      uploadStatus: DictationUploadStatus.pending,
-      currentUpload: updated,
       record: state.record?.copyWith(
-        status: DictationSessionStatus.ready,
+        status: DictationSessionStatus.recording,
         updatedAt: DateTime.now().toUtc(),
       ),
     );
-    unawaited(_queueWorker.processQueue().then((_) => _onQueueProcessed()));
   }
 
   Future<void> deleteCurrent() async {
@@ -267,7 +255,6 @@ class DictationController extends StateNotifier<DictationState> {
         await file.delete();
       }
     }
-    await _cancelAmplitude();
     _durationTimer?.cancel();
     state = DictationState.initial();
   }
@@ -359,27 +346,7 @@ class DictationController extends StateNotifier<DictationState> {
     unawaited(controller.refresh());
   }
 
-  void _listenToAmplitude() {
-    _amplitudeSubscription?.cancel();
-    _amplitudeSubscription = _recorder.onAmplitude().listen(
-      (event) {
-        final normalized = event.max == 0 ? 0.0 : (event.current / event.max).clamp(0.0, 1.0);
-        state = state.copyWith(amplitudeLevel: normalized);
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        debugPrint('Amplitude stream error: $error\n$stackTrace');
-      },
-    );
-  }
-
-  Future<void> _cancelAmplitude() async {
-    await _amplitudeSubscription?.cancel();
-    _amplitudeSubscription = null;
-    state = state.copyWith(amplitudeLevel: 0);
-  }
-
   Future<void> _resetCurrentRecording({bool deleteFile = false}) async {
-    await _cancelAmplitude();
     _durationTimer?.cancel();
     _stopwatch
       ..stop()
@@ -411,7 +378,6 @@ class DictationController extends StateNotifier<DictationState> {
   @override
   void dispose() {
     _durationTimer?.cancel();
-    _amplitudeSubscription?.cancel();
     _stopwatch.stop();
     super.dispose();
   }

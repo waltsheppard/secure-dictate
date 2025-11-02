@@ -36,10 +36,13 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
       (previous, next) {
         final player = ref.read(dictationPlayerControllerProvider.notifier);
         final previousPath = previous?.filePath;
-        if (next.filePath != null && next.filePath != previousPath && next.canPlayback) {
+        final canPlayNow = next.filePath != null && next.canPlayback;
+        final couldPlayBefore =
+            previousPath != null && previous?.canPlayback == true && previousPath == next.filePath;
+        if (canPlayNow && !couldPlayBefore) {
           player.load(next.filePath!);
         }
-        if (next.filePath == null && previousPath != null) {
+        if (!canPlayNow && previousPath != null && previous?.canPlayback == true) {
           player.stop();
         }
       },
@@ -189,15 +192,7 @@ class _RecordingStatus extends StatelessWidget {
               children: [
                 _InfoChip(label: 'Duration', value: _formatDuration(state.duration)),
                 _InfoChip(label: 'Size', value: _formatSize(state.fileSizeBytes)),
-                _InfoChip(label: 'Amplitude', value: '${(state.amplitudeLevel * 100).round()}%'),
               ],
-            ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: state.amplitudeLevel.clamp(0, 1),
-              minHeight: 6,
-              color: theme.colorScheme.primary,
-              backgroundColor: theme.colorScheme.surface,
             ),
           ],
         ),
@@ -348,23 +343,23 @@ class _ActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isHeld = state.uploadStatus == DictationUploadStatus.held || state.status == DictationSessionStatus.holding;
+    final isHeld = state.isHeld || state.status == DictationSessionStatus.holding;
+    final canToggleHold = isHeld || state.canHold;
     return Row(
       children: [
         Expanded(
           child: FilledButton.icon(
             icon: const Icon(Icons.cloud_upload),
             label: const Text('Submit'),
-                onPressed:
-                    state.canSubmit ? () => unawaited(onSubmit(metadata: const {})) : null,
+            onPressed: state.canSubmit ? () => unawaited(onSubmit(metadata: const {})) : null,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: OutlinedButton.icon(
             icon: Icon(isHeld ? Icons.play_circle : Icons.pause_circle),
-            label: Text(isHeld ? 'Resume Hold' : 'Hold'),
-            onPressed: state.canHold
+            label: Text(isHeld ? 'Resume Recording' : 'Hold'),
+            onPressed: canToggleHold
                 ? () => unawaited(isHeld ? onResumeHeld() : onHold())
                 : null,
           ),

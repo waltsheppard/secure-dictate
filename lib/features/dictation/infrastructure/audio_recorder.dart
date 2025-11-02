@@ -19,21 +19,14 @@ abstract class DictationRecorder {
 
   Future<bool> isRecording();
 
-  Stream<record.Amplitude> onAmplitude();
-
   Future<void> dispose();
 }
 
 class DefaultDictationRecorder implements DictationRecorder {
   DefaultDictationRecorder([record.AudioRecorder? recorder])
-      : _recorder = recorder ?? record.AudioRecorder() {
-    _amplitudeStream = _recorder
-        .onAmplitudeChanged(const Duration(milliseconds: 200))
-        .asBroadcastStream();
-  }
+      : _recorder = recorder ?? record.AudioRecorder();
 
   final record.AudioRecorder _recorder;
-  late final Stream<record.Amplitude> _amplitudeStream;
 
   record.RecordConfig _buildConfig({
     required int bitRate,
@@ -76,9 +69,6 @@ class DefaultDictationRecorder implements DictationRecorder {
 
   @override
   Future<bool> isRecording() => _recorder.isRecording();
-
-  @override
-  Stream<record.Amplitude> onAmplitude() => _amplitudeStream;
 
   @override
   Future<void> dispose() async {
