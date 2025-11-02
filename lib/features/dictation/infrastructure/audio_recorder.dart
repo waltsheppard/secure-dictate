@@ -26,11 +26,14 @@ abstract class DictationRecorder {
 
 class DefaultDictationRecorder implements DictationRecorder {
   DefaultDictationRecorder([record.AudioRecorder? recorder])
-      : _recorder = recorder ?? record.AudioRecorder();
+      : _recorder = recorder ?? record.AudioRecorder() {
+    _amplitudeStream = _recorder
+        .onAmplitudeChanged(const Duration(milliseconds: 200))
+        .asBroadcastStream();
+  }
 
   final record.AudioRecorder _recorder;
-  StreamController<record.Amplitude>? _amplitudeController;
-  StreamSubscription<record.Amplitude>? _amplitudeSubscription;
+  late final Stream<record.Amplitude> _amplitudeStream;
 
   record.RecordConfig _buildConfig({
     required int bitRate,
@@ -59,21 +62,6 @@ class DefaultDictationRecorder implements DictationRecorder {
     );
   }
 
-  void _bindAmplitudeStream() {
-    _amplitudeController ??= StreamController<record.Amplitude>.broadcast();
-    _amplitudeSubscription?.cancel();
-    final source = _recorder.onAmplitudeChanged(const Duration(milliseconds: 200));
-    _amplitudeSubscription = source.listen(
-      (event) {
-        _amplitudeController?.add(event);
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        _amplitudeController?.addError(error, stackTrace);
-      },
-      cancelOnError: true,
-    );
-  }
-
   @override
   Future<void> pauseRecording() => _recorder.pause();
 
@@ -83,10 +71,6 @@ class DefaultDictationRecorder implements DictationRecorder {
   @override
   Future<String?> stopRecording() async {
     final path = await _recorder.stop();
-    await _amplitudeSubscription?.cancel();
-    _amplitudeSubscription = null;
-    await _amplitudeController?.close();
-    _amplitudeController = null;
     return path;
   }
 
@@ -94,21 +78,10 @@ class DefaultDictationRecorder implements DictationRecorder {
   Future<bool> isRecording() => _recorder.isRecording();
 
   @override
-  Stream<record.Amplitude> onAmplitude() {
-    if (_amplitudeController == null || _amplitudeSubscription == null) {
-      _bindAmplitudeStream();
-    }
-    return _amplitudeController!.stream;
-  }
+  Stream<record.Amplitude> onAmplitude() => _amplitudeStream;
 
   @override
   Future<void> dispose() async {
-    await _amplitudeSubscription?.cancel();
-    _amplitudeSubscription = null;
-    if (_amplitudeController != null) {
-      await _amplitudeController!.close();
-      _amplitudeController = null;
-    }
     await _recorder.dispose();
   }
 }
