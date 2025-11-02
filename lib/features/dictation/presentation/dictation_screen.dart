@@ -29,10 +29,8 @@ class DictationBody extends ConsumerStatefulWidget {
 }
 
 class _DictationBodyState extends ConsumerState<DictationBody> {
-
   @override
-  void initState() {
-    super.initState();
+  Widget build(BuildContext context) {
     ref.listen<DictationState>(
       dictationControllerProvider,
       (previous, next) {
@@ -46,15 +44,6 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
         }
       },
     );
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     final dictationState = ref.watch(dictationControllerProvider);
     final dictationController = ref.read(dictationControllerProvider.notifier);
     final playerState = ref.watch(dictationPlayerControllerProvider);
