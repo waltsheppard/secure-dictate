@@ -5,7 +5,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:record/record.dart';
+import 'package:record/record.dart' as record show Amplitude;
 import 'package:uuid/uuid.dart';
 
 import '../domain/dictation_record.dart';
@@ -20,13 +20,13 @@ class DictationController extends StateNotifier<DictationState> {
   DictationController(this._ref) : super(DictationState.initial());
 
   final Ref _ref;
-  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  StreamSubscription<record.Amplitude>? _amplitudeSubscription;
   Timer? _durationTimer;
   final Stopwatch _stopwatch = Stopwatch();
   Duration _accumulatedDuration = Duration.zero;
   final Random _tagRandom = Random.secure();
 
-  AudioRecorder get _recorder => _ref.read(audioRecorderProvider);
+  DictationRecorder get _recorder => _ref.read(dictationRecorderProvider);
   DictationLocalStore get _store => _ref.read(dictationLocalStoreProvider);
   DictationQueueWorker get _queueWorker => _ref.read(dictationQueueWorkerProvider);
 
@@ -145,7 +145,7 @@ class DictationController extends StateNotifier<DictationState> {
       final path = state.filePath;
       final dictationId = state.dictationId;
       if (path == null || dictationId == null) {
-        throw const StateError('No dictation to submit.');
+        throw StateError('No dictation to submit.');
       }
       final file = File(path);
       if (!await file.exists()) {

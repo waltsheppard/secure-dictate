@@ -14,7 +14,7 @@ class DictationScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Secure Dictation'),
       ),
-      body: const SafeArea(
+      body: SafeArea(
         child: DictationBody(),
       ),
     );
@@ -29,12 +29,11 @@ class DictationBody extends ConsumerStatefulWidget {
 }
 
 class _DictationBodyState extends ConsumerState<DictationBody> {
-  ProviderSubscription<DictationState>? _dictationSubscription;
 
   @override
   void initState() {
     super.initState();
-    _dictationSubscription = ref.listen<DictationState>(
+    ref.listen<DictationState>(
       dictationControllerProvider,
       (previous, next) {
         final player = ref.read(dictationPlayerControllerProvider.notifier);
@@ -51,7 +50,6 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
 
   @override
   void dispose() {
-    _dictationSubscription?.close();
     super.dispose();
   }
 

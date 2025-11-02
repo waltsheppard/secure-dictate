@@ -24,7 +24,7 @@ class AmplifyDictationUploader implements DictationUploader {
     await Amplify.Storage.uploadFile(
       localFile: awsFile,
       path: StoragePath.fromString(storageKey),
-      options: StorageUploadFileOptions(metadata: metadata),
+      options: StorageUploadFileOptions(metadata: metadata ?? const {}),
     );
     // Placeholder for metadata persistence. Later this should call an API or AppSync mutation.
     if (Amplify.API.plugins.isEmpty) {

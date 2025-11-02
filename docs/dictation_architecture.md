@@ -9,7 +9,7 @@
 ## Key Components
 
 ### Recording Pipeline
-- `AudioRecorder` abstraction wraps the platform recorder (`record` package) and enforces:
+- `DictationRecorder` abstraction wraps the platform recorder (`record` package) and enforces:
   - Elevated audio quality profile (uncompressed WAV on iOS/macOS, PCM/FLAC on Android).
   - Recording to an app-private directory surfaced by `path_provider`.
 - On start: pre-generate a `DictationId` (UUID v4), allocate the next sequential number, generate a 12-character alphanumeric tag, and reserve a file path (`<seq>_<tag>_<uuid>.wav`).

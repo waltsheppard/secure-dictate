@@ -142,7 +142,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
             Expanded(
-              child: const DictationBody(),
+              child: DictationBody(),
             ),
           ],
         ),
