@@ -30,6 +30,7 @@ class DefaultDictationRecorder implements DictationRecorder {
 
   final record.AudioRecorder _recorder;
   StreamController<record.Amplitude>? _amplitudeController;
+  StreamSubscription<record.Amplitude>? _amplitudeSubscription;
 
   record.RecordConfig _buildConfig({
     required int bitRate,
@@ -61,7 +62,9 @@ class DefaultDictationRecorder implements DictationRecorder {
 
   void _bindAmplitudeStream() {
     _amplitudeController ??= StreamController<record.Amplitude>.broadcast();
-    _recorder.onAmplitudeChanged(const Duration(milliseconds: 200)).listen(
+    _amplitudeSubscription?.cancel();
+    final source = _recorder.onAmplitudeChanged(const Duration(milliseconds: 200));
+    _amplitudeSubscription = source.listen(
       (event) {
         _amplitudeController?.add(event);
       },
@@ -81,6 +84,8 @@ class DefaultDictationRecorder implements DictationRecorder {
   @override
   Future<String?> stopRecording() async {
     final path = await _recorder.stop();
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
     await _amplitudeController?.close();
     _amplitudeController = null;
     return path;
@@ -97,6 +102,8 @@ class DefaultDictationRecorder implements DictationRecorder {
 
   @override
   Future<void> dispose() async {
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
     if (_amplitudeController != null) {
       await _amplitudeController!.close();
       _amplitudeController = null;
