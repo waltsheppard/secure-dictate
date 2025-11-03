@@ -24,13 +24,13 @@ class DictationPlayerState {
   final String? errorMessage;
 
   factory DictationPlayerState.initial() => const DictationPlayerState(
-        filePath: null,
-        isLoading: false,
-        isPlaying: false,
-        position: Duration.zero,
-        duration: null,
-        errorMessage: null,
-      );
+    filePath: null,
+    isLoading: false,
+    isPlaying: false,
+    position: Duration.zero,
+    duration: null,
+    errorMessage: null,
+  );
 
   DictationPlayerState copyWith({
     String? filePath,
@@ -65,7 +65,6 @@ class DictationPlayerController extends StateNotifier<DictationPlayerState> {
   DictationPlayer get _player => _ref.read(dictationPlayerProvider);
 
   Future<void> load(String filePath) async {
-    if (state.filePath == filePath) return;
     state = state.copyWith(
       filePath: filePath,
       isLoading: true,
@@ -78,10 +77,7 @@ class DictationPlayerController extends StateNotifier<DictationPlayerState> {
       _bindStreams();
       state = state.copyWith(isLoading: false, position: Duration.zero);
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: error.toString(),
-      );
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
     }
   }
 
@@ -134,5 +130,5 @@ class DictationPlayerController extends StateNotifier<DictationPlayerState> {
 
 final dictationPlayerControllerProvider =
     StateNotifierProvider<DictationPlayerController, DictationPlayerState>(
-  (ref) => DictationPlayerController(ref),
-);
+      (ref) => DictationPlayerController(ref),
+    );
