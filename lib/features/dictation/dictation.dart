@@ -11,5 +11,7 @@ export 'application/dictation_controller.dart';
 export 'application/dictation_queue_controller.dart';
 export 'application/dictation_player_controller.dart';
 export 'application/held_dictations_controller.dart';
+export 'application/uploads_controller.dart';
 export 'presentation/dictation_screen.dart';
 export 'presentation/held_dictations_screen.dart';
+export 'presentation/uploads_screen.dart';

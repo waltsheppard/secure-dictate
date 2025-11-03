@@ -43,7 +43,6 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
     final playerController = ref.read(
       dictationPlayerControllerProvider.notifier,
     );
-    final queueState = ref.watch(dictationQueueProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -74,13 +73,6 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
             onHold: dictationController.holdCurrent,
             onResumeHeld: dictationController.resumeHeld,
             onDelete: dictationController.deleteCurrent,
-          ),
-          const SizedBox(height: 24),
-          _QueueSummary(
-            queueState: queueState,
-            onRefresh: () {
-              ref.read(dictationQueueProvider.notifier).refresh();
-            },
           ),
           if (dictationState.errorMessage != null) ...[
             const SizedBox(height: 24),
@@ -428,140 +420,6 @@ class _ActionButtons extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-class _QueueSummary extends StatelessWidget {
-  const _QueueSummary({required this.queueState, required this.onRefresh});
-
-  final AsyncValue<List<DictationUpload>> queueState;
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Upload Queue',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Refresh queue',
-                  onPressed: onRefresh,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            queueState.when(
-              data: (uploads) {
-                if (uploads.isEmpty) {
-                  return const Text('No pending dictations.');
-                }
-                return Column(
-                  children: uploads
-                      .map(
-                        (upload) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(_iconForStatus(upload.status)),
-                          title: Text(
-                            '${_sequenceLabel(upload.sequenceNumber)} • ${_tagLabel(upload.tag)}',
-                          ),
-                          subtitle: Text(
-                            '${_statusLabel(upload.status)} • ${_formatSize(upload.fileSizeBytes)} • ${_formatDuration(upload.duration)} • ${_shortId(upload.id)}',
-                          ),
-                          trailing:
-                              upload.status == DictationUploadStatus.failed
-                                  ? Icon(
-                                    Icons.error,
-                                    color: Theme.of(context).colorScheme.error,
-                                  )
-                                  : null,
-                        ),
-                      )
-                      .toList(growable: false),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Text('Queue unavailable: $error'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _iconForStatus(DictationUploadStatus status) {
-    switch (status) {
-      case DictationUploadStatus.pending:
-        return Icons.schedule;
-      case DictationUploadStatus.uploading:
-        return Icons.cloud_upload;
-      case DictationUploadStatus.failed:
-        return Icons.error;
-      case DictationUploadStatus.completed:
-        return Icons.check_circle;
-      case DictationUploadStatus.held:
-        return Icons.pause_circle;
-    }
-  }
-
-  String _statusLabel(DictationUploadStatus status) {
-    switch (status) {
-      case DictationUploadStatus.pending:
-        return 'Pending upload';
-      case DictationUploadStatus.uploading:
-        return 'Uploading';
-      case DictationUploadStatus.held:
-        return 'Held locally';
-      case DictationUploadStatus.failed:
-        return 'Failed';
-      case DictationUploadStatus.completed:
-        return 'Completed';
-    }
-  }
-
-  String _sequenceLabel(int sequenceNumber) {
-    if (sequenceNumber <= 0) return 'Unnumbered';
-    return '#${sequenceNumber.toString().padLeft(6, '0')}';
-  }
-
-  String _tagLabel(String tag) {
-    if (tag.isEmpty) return 'N/A';
-    return tag;
-  }
-
-  String _shortId(String id) {
-    if (id.length <= 8) return id;
-    return '${id.substring(0, 8)}…';
-  }
-
-  String _formatSize(int bytes) {
-    if (bytes <= 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    var value = bytes.toDouble();
-    var unitIndex = 0;
-    while (value >= 1024 && unitIndex < units.length - 1) {
-      value /= 1024;
-      unitIndex++;
-    }
-    return '${value.toStringAsFixed(1)} ${units[unitIndex]}';
-  }
-
-  String _formatDuration(Duration value) {
-    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
   }
 }
 

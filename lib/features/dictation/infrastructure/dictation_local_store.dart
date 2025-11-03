@@ -17,6 +17,7 @@ class DictationLocalStore {
   File? _queueFile;
   File? _sequenceFile;
   File? _heldFile;
+  File? _historyFile;
   Future<void> _initialization = Future.value();
 
   Future<void> ensureInitialized() async {
@@ -44,10 +45,15 @@ class DictationLocalStore {
     if (!await heldFile.exists()) {
       await heldFile.writeAsString(jsonEncode({'held': <Map<String, dynamic>>[]}), flush: true);
     }
+    final historyFile = File(p.join(dictationDir.path, 'history.json'));
+    if (!await historyFile.exists()) {
+      await historyFile.writeAsString(jsonEncode({'history': <Map<String, dynamic>>[]}), flush: true);
+    }
     _dictationDir = dictationDir;
     _queueFile = queueFile;
     _sequenceFile = sequenceFile;
     _heldFile = heldFile;
+    _historyFile = historyFile;
   }
 
   Future<File> _ensureQueueFile() async {
@@ -63,6 +69,11 @@ class DictationLocalStore {
   Future<File> _ensureHeldFile() async {
     await ensureInitialized();
     return _heldFile!;
+  }
+
+  Future<File> _ensureHistoryFile() async {
+    await ensureInitialized();
+    return _historyFile!;
   }
 
   Future<Directory> dictationDirectory() async {
@@ -206,6 +217,46 @@ class DictationLocalStore {
     await file.writeAsString(payload, flush: true);
   }
 
+  Future<List<DictationUpload>> loadHistory() async {
+    final file = await _ensureHistoryFile();
+    if (!await file.exists()) {
+      return const [];
+    }
+    final content = await file.readAsString();
+    if (content.trim().isEmpty) {
+      return const [];
+    }
+    final baseDir = (await dictationDirectory()).path;
+    try {
+      final Map<String, dynamic> json = jsonDecode(content) as Map<String, dynamic>;
+      final List<dynamic> items = json['history'] as List<dynamic>? ?? const [];
+      return items
+          .map((dynamic e) => _uploadFromJson((e as Map).cast<String, dynamic>(), baseDir))
+          .toList(growable: false);
+    } catch (error, stackTrace) {
+      debugPrint('Failed to decode history file: $error\n$stackTrace');
+      return const [];
+    }
+  }
+
+  Future<void> saveHistory(List<DictationUpload> uploads) async {
+    final file = await _ensureHistoryFile();
+    final baseDir = (await dictationDirectory()).path;
+    final payload = jsonEncode({
+      'history': uploads.map((e) => _uploadToJson(e, baseDir)).toList(growable: false),
+    });
+    await file.writeAsString(payload, flush: true);
+  }
+
+  Future<void> appendHistory(DictationUpload upload, {int limit = 20}) async {
+    final history = await loadHistory();
+    final updated = <DictationUpload>[upload, ...history];
+    if (updated.length > limit) {
+      updated.removeRange(limit, updated.length);
+    }
+    await saveHistory(updated);
+  }
+
   Future<void> upsertHeld(HeldDictation session) async {
     final held = await loadHeld();
     final updated = <HeldDictation>[];
@@ -271,6 +322,45 @@ class DictationLocalStore {
       sequenceNumber: json['sequenceNumber'] as int? ?? 0,
       tag: json['tag'] as String? ?? '',
       segments: segments,
+    );
+  }
+
+  Map<String, dynamic> _uploadToJson(DictationUpload upload, String baseDir) {
+    return {
+      'id': upload.id,
+      'filePath': _relativePath(upload.filePath, baseDir),
+      'status': upload.status.name,
+      'createdAt': upload.createdAt.toIso8601String(),
+      'updatedAt': upload.updatedAt.toIso8601String(),
+      'uploadedAt': upload.uploadedAt?.toIso8601String(),
+      'retryCount': upload.retryCount,
+      'errorMessage': upload.errorMessage,
+      'fileSizeBytes': upload.fileSizeBytes,
+      'durationMicros': upload.duration.inMicroseconds,
+      'metadata': upload.metadata,
+      'checksumSha256': upload.checksumSha256,
+      'sequenceNumber': upload.sequenceNumber,
+      'tag': upload.tag,
+    };
+  }
+
+  DictationUpload _uploadFromJson(Map<String, dynamic> json, String baseDir) {
+    final uploadedAtValue = json['uploadedAt'] as String?;
+    return DictationUpload(
+      id: json['id'] as String,
+      filePath: _absolutePath(json['filePath'] as String, baseDir),
+      status: DictationUploadStatus.values.byName(json['status'] as String),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      uploadedAt: uploadedAtValue != null ? DateTime.parse(uploadedAtValue) : null,
+      retryCount: json['retryCount'] as int? ?? 0,
+      errorMessage: json['errorMessage'] as String?,
+      fileSizeBytes: json['fileSizeBytes'] as int? ?? 0,
+      duration: Duration(microseconds: json['durationMicros'] as int? ?? 0),
+      metadata: (json['metadata'] as Map?)?.cast<String, dynamic>() ?? const {},
+      checksumSha256: json['checksumSha256'] as String?,
+      sequenceNumber: json['sequenceNumber'] as int? ?? 0,
+      tag: json['tag'] as String? ?? '',
     );
   }
 

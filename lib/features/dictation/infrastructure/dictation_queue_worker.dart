@@ -37,6 +37,24 @@ class DictationQueueWorker {
       await upsert(pending);
       try {
         await _uploader.upload(pending, metadata: _stringifyMetadata(pending.metadata));
+        final now = DateTime.now().toUtc();
+        final completed = DictationUpload(
+          id: pending.id,
+          filePath: pending.filePath,
+          status: DictationUploadStatus.completed,
+          createdAt: pending.createdAt,
+          updatedAt: now,
+          uploadedAt: now,
+          retryCount: pending.retryCount,
+          errorMessage: null,
+          fileSizeBytes: pending.fileSizeBytes,
+          duration: pending.duration,
+          metadata: pending.metadata,
+          checksumSha256: pending.checksumSha256,
+          sequenceNumber: pending.sequenceNumber,
+          tag: pending.tag,
+        );
+        await _store.appendHistory(completed);
         await _store.removeUpload(pending.id, deleteFile: true);
       } on Exception catch (error, stackTrace) {
         debugPrint('Failed uploading dictation ${pending.id}: $error\n$stackTrace');
