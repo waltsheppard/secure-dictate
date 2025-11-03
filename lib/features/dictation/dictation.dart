@@ -1,5 +1,6 @@
 export 'domain/dictation_record.dart';
 export 'domain/dictation_upload.dart';
+export 'domain/held_dictation.dart';
 export 'infrastructure/audio_recorder.dart';
 export 'infrastructure/dictation_local_store.dart';
 export 'infrastructure/dictation_uploader.dart';
@@ -9,4 +10,6 @@ export 'application/dictation_state.dart';
 export 'application/dictation_controller.dart';
 export 'application/dictation_queue_controller.dart';
 export 'application/dictation_player_controller.dart';
+export 'application/held_dictations_controller.dart';
 export 'presentation/dictation_screen.dart';
+export 'presentation/held_dictations_screen.dart';

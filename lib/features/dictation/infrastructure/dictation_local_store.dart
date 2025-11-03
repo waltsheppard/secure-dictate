@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/dictation_upload.dart';
+import '../domain/held_dictation.dart';
 
 class DictationLocalStore {
   DictationLocalStore();
@@ -15,6 +16,7 @@ class DictationLocalStore {
   Directory? _dictationDir;
   File? _queueFile;
   File? _sequenceFile;
+  File? _heldFile;
   Future<void> _initialization = Future.value();
 
   Future<void> ensureInitialized() async {
@@ -32,20 +34,35 @@ class DictationLocalStore {
     }
     final queueFile = File(p.join(dictationDir.path, 'queue.json'));
     if (!await queueFile.exists()) {
-      await queueFile.writeAsString(jsonEncode({'queue': <Map<String, dynamic>>[]}));
+      await queueFile.writeAsString(jsonEncode({'queue': <Map<String, dynamic>>[]}), flush: true);
     }
     final sequenceFile = File(p.join(dictationDir.path, 'sequence.txt'));
     if (!await sequenceFile.exists()) {
       await sequenceFile.writeAsString('1', flush: true);
     }
+    final heldFile = File(p.join(dictationDir.path, 'held.json'));
+    if (!await heldFile.exists()) {
+      await heldFile.writeAsString(jsonEncode({'held': <Map<String, dynamic>>[]}), flush: true);
+    }
     _dictationDir = dictationDir;
     _queueFile = queueFile;
     _sequenceFile = sequenceFile;
+    _heldFile = heldFile;
   }
 
   Future<File> _ensureQueueFile() async {
     await ensureInitialized();
     return _queueFile!;
+  }
+
+  Future<File> _ensureSequenceFile() async {
+    await ensureInitialized();
+    return _sequenceFile!;
+  }
+
+  Future<File> _ensureHeldFile() async {
+    await ensureInitialized();
+    return _heldFile!;
   }
 
   Future<Directory> dictationDirectory() async {
@@ -144,13 +161,9 @@ class DictationLocalStore {
       }
     }
     await saveQueue(const []);
+    await saveHeld(const []);
     final sequenceFile = await _ensureSequenceFile();
     await sequenceFile.writeAsString('1', flush: true);
-  }
-
-  Future<File> _ensureSequenceFile() async {
-    await ensureInitialized();
-    return _sequenceFile!;
   }
 
   Future<int> nextSequenceNumber() async {
@@ -162,6 +175,67 @@ class DictationLocalStore {
     return current;
   }
 
+  Future<List<HeldDictation>> loadHeld() async {
+    final file = await _ensureHeldFile();
+    if (!await file.exists()) {
+      return const [];
+    }
+    final content = await file.readAsString();
+    if (content.trim().isEmpty) {
+      return const [];
+    }
+    try {
+      final Map<String, dynamic> json = jsonDecode(content) as Map<String, dynamic>;
+      final List<dynamic> items = json['held'] as List<dynamic>? ?? const [];
+      return items
+          .map((dynamic e) => HeldDictation.fromJson((e as Map).cast<String, dynamic>()))
+          .toList(growable: false);
+    } catch (error, stackTrace) {
+      debugPrint('Failed to decode held file: $error\n$stackTrace');
+      return const [];
+    }
+  }
+
+  Future<void> saveHeld(List<HeldDictation> sessions) async {
+    final file = await _ensureHeldFile();
+    final payload = jsonEncode({
+      'held': sessions.map((e) => e.toJson()).toList(growable: false),
+    });
+    await file.writeAsString(payload, flush: true);
+  }
+
+  Future<void> upsertHeld(HeldDictation session) async {
+    final held = await loadHeld();
+    final updated = <HeldDictation>[];
+    var found = false;
+    for (final entry in held) {
+      if (entry.id == session.id) {
+        updated.add(session);
+        found = true;
+      } else {
+        updated.add(entry);
+      }
+    }
+    if (!found) {
+      updated.add(session);
+    }
+    await saveHeld(updated);
+  }
+
+  Future<HeldDictation?> removeHeld(String dictationId) async {
+    final held = await loadHeld();
+    HeldDictation? removed;
+    final remaining = <HeldDictation>[];
+    for (final entry in held) {
+      if (entry.id == dictationId) {
+        removed = entry;
+        continue;
+      }
+      remaining.add(entry);
+    }
+    await saveHeld(remaining);
+    return removed;
+  }
 }
 
 final dictationLocalStoreProvider = Provider<DictationLocalStore>((ref) {

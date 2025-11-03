@@ -3,6 +3,7 @@ import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:authapp1/features/auth/auth.dart';
 import 'package:authapp1/features/dictation/presentation/dictation_screen.dart';
+import 'package:authapp1/features/dictation/presentation/held_dictations_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key, this.requiresContactVerification = false});
@@ -74,6 +75,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: const Text('Home'),
         actions: [
           IconButton(
+            tooltip: 'Held dictations',
+            icon: const Icon(Icons.list_alt),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const HeldDictationsScreen()),
+              );
+            },
+          ),
+          IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
             onPressed: () => _signOut(context),
@@ -93,28 +103,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-              if (_needsVerification)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                  child: Card(
-                    color: Theme.of(context).colorScheme.secondaryContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text(
-                            'Verify your contact information',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            ref.read(authConfigProvider).requirePhoneVerification
-                                ? 'We still need you to confirm your email and phone number. '
+            if (_needsVerification)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                child: Card(
+                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Verify your contact information',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          ref.read(authConfigProvider).requirePhoneVerification
+                              ? 'We still need you to confirm your email and phone number. '
                                   'Follow the verification links/code sent to your email and SMS, then refresh status.'
-                                : 'We still need you to confirm your email address. '
+                              : 'We still need you to confirm your email address. '
                                   'Follow the verification link sent to your email, then refresh status.',
-                          ),
+                        ),
                         const SizedBox(height: 12),
                         ElevatedButton(
                           onPressed: _checkingVerification ? null : _refreshVerification,
@@ -142,7 +152,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
             Expanded(
-              child: DictationBody(),
+              child: const DictationBody(),
             ),
           ],
         ),

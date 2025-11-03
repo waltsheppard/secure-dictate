@@ -15,6 +15,8 @@ import '../infrastructure/dictation_queue_worker.dart';
 import '../domain/dictation_upload.dart';
 import 'dictation_state.dart';
 import 'dictation_queue_controller.dart';
+import 'held_dictations_controller.dart';
+import '../domain/held_dictation.dart';
 
 class DictationController extends StateNotifier<DictationState> {
   DictationController(this._ref) : super(DictationState.initial());
@@ -220,11 +222,33 @@ class DictationController extends StateNotifier<DictationState> {
         updatedAt: DateTime.now().toUtc(),
       ),
     );
+    final dictationId = state.dictationId;
+    final path = state.filePath;
+    if (dictationId != null && path != null) {
+      final fileSize = await _safeFileSize(path);
+      final held = HeldDictation(
+        id: dictationId,
+        filePath: path,
+        duration: _accumulatedDuration,
+        fileSizeBytes: fileSize,
+        createdAt: state.record?.createdAt ?? DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+        sequenceNumber: state.record?.sequenceNumber ?? 0,
+        tag: state.record?.tag ?? '',
+      );
+      await _store.upsertHeld(held);
+      _ref.read(heldDictationsProvider.notifier).refresh();
+    }
   }
 
   Future<void> resumeHeld() async {
     if (!state.isHeld || state.status != DictationSessionStatus.holding) {
       return;
+    }
+    final dictationId = state.dictationId;
+    if (dictationId != null) {
+      await _store.removeHeld(dictationId);
+      _ref.read(heldDictationsProvider.notifier).refresh();
     }
     await _recorder.resumeRecording();
     _stopwatch
@@ -241,6 +265,68 @@ class DictationController extends StateNotifier<DictationState> {
     );
   }
 
+  Future<void> resumeHeldFromStore(String dictationId) async {
+    final heldController = _ref.read(heldDictationsProvider.notifier);
+    final held = await _store.removeHeld(dictationId);
+    unawaited(heldController.refresh());
+    if (held == null) {
+      state = state.copyWith(errorMessage: 'Held dictation not found.');
+      return;
+    }
+    final dictationFile = File(held.filePath);
+    if (!await dictationFile.exists()) {
+      state = state.copyWith(errorMessage: 'Held file missing: ${held.filePath}');
+      return;
+    }
+    try {
+      await _recorder.resumeRecording();
+    } catch (error) {
+      await _store.upsertHeld(held);
+      unawaited(heldController.refresh());
+      _durationTimer?.cancel();
+      _stopwatch
+        ..stop()
+        ..reset();
+      state = state.copyWith(
+        status: DictationSessionStatus.idle,
+        dictationId: null,
+        filePath: null,
+        duration: Duration.zero,
+        fileSizeBytes: 0,
+        clearRecord: true,
+        errorMessage: 'Unable to resume the previous session. Start a new recording.',
+      );
+      return;
+    }
+    _accumulatedDuration = held.duration;
+    _stopwatch
+      ..reset()
+      ..start();
+    _startDurationTimer();
+    state = state.copyWith(
+      status: DictationSessionStatus.recording,
+      dictationId: held.id,
+      filePath: held.filePath,
+      duration: held.duration,
+      fileSizeBytes: held.fileSizeBytes,
+      isHeld: false,
+      hasQueuedUpload: false,
+      uploadStatus: null,
+      record: DictationRecord(
+        id: held.id,
+        filePath: held.filePath,
+        status: DictationSessionStatus.recording,
+        duration: held.duration,
+        fileSizeBytes: held.fileSizeBytes,
+        createdAt: held.createdAt,
+        updatedAt: DateTime.now().toUtc(),
+        segments: [held.filePath],
+        sequenceNumber: held.sequenceNumber,
+        tag: held.tag,
+      ),
+    );
+  }
+
   Future<void> deleteCurrent() async {
     await stopRecording();
     final dictationId = state.dictationId;
@@ -248,6 +334,8 @@ class DictationController extends StateNotifier<DictationState> {
     if (dictationId != null) {
       await _queueWorker.delete(dictationId, deleteFile: path != null);
       _notifyQueueChanged();
+      await _store.removeHeld(dictationId);
+      _ref.read(heldDictationsProvider.notifier).refresh();
     }
     if (path != null) {
       final file = File(path);
