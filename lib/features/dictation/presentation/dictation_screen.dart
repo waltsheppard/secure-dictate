@@ -280,7 +280,7 @@ class _PlaybackCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canInteract =
-        dictationState.canPlayback && playerState.filePath != null;
+        dictationState.canPlayback && dictationState.filePath != null;
     final position = playerState.position;
     final duration = playerState.duration ?? dictationState.duration;
     final progress =
