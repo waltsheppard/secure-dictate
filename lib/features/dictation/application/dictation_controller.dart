@@ -304,6 +304,7 @@ class DictationController extends StateNotifier<DictationState> {
     state = state.copyWith(
       status: DictationSessionStatus.recording,
       isHeld: false,
+      filePath: _finalFilePath ?? state.filePath,
       record: state.record?.copyWith(
         status: DictationSessionStatus.recording,
         updatedAt: DateTime.now().toUtc(),
