@@ -55,9 +55,7 @@ class HeldDictationsScreen extends ConsumerWidget {
                           unawaited(_resumeHeld(context, ref, upload));
                           break;
                         case _HeldAction.delete:
-                          ref
-                              .read(heldDictationsProvider.notifier)
-                              .delete(upload.id);
+                          unawaited(_confirmDelete(context, ref, upload.id));
                           break;
                       }
                     },
@@ -126,6 +124,36 @@ class HeldDictationsScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to resume dictation: $error')),
       );
+    }
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    String dictationId,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Delete held dictation?'),
+            content: const Text(
+              'This will permanently remove the dictation from this device.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed == true) {
+      await ref.read(heldDictationsProvider.notifier).delete(dictationId);
     }
   }
 
