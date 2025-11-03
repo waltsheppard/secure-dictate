@@ -184,11 +184,12 @@ class DictationLocalStore {
     if (content.trim().isEmpty) {
       return const [];
     }
+    final baseDir = (await dictationDirectory()).path;
     try {
       final Map<String, dynamic> json = jsonDecode(content) as Map<String, dynamic>;
       final List<dynamic> items = json['held'] as List<dynamic>? ?? const [];
       return items
-          .map((dynamic e) => HeldDictation.fromJson((e as Map).cast<String, dynamic>()))
+          .map((dynamic e) => _heldFromJson((e as Map).cast<String, dynamic>(), baseDir))
           .toList(growable: false);
     } catch (error, stackTrace) {
       debugPrint('Failed to decode held file: $error\n$stackTrace');
@@ -198,8 +199,9 @@ class DictationLocalStore {
 
   Future<void> saveHeld(List<HeldDictation> sessions) async {
     final file = await _ensureHeldFile();
+    final baseDir = (await dictationDirectory()).path;
     final payload = jsonEncode({
-      'held': sessions.map((e) => e.toJson()).toList(growable: false),
+      'held': sessions.map((e) => _heldToJson(e, baseDir)).toList(growable: false),
     });
     await file.writeAsString(payload, flush: true);
   }
@@ -235,6 +237,61 @@ class DictationLocalStore {
     }
     await saveHeld(remaining);
     return removed;
+  }
+
+  Map<String, dynamic> _heldToJson(HeldDictation session, String baseDir) {
+    return {
+      'id': session.id,
+      'filePath': _relativePath(session.filePath, baseDir),
+      'durationMicros': session.duration.inMicroseconds,
+      'fileSizeBytes': session.fileSizeBytes,
+      'createdAt': session.createdAt.toIso8601String(),
+      'updatedAt': session.updatedAt.toIso8601String(),
+      'sequenceNumber': session.sequenceNumber,
+      'tag': session.tag,
+      'segments': session.segments
+          .map((path) => _relativePath(path, baseDir))
+          .toList(growable: false),
+    };
+  }
+
+  HeldDictation _heldFromJson(Map<String, dynamic> json, String baseDir) {
+    final filePath = _absolutePath(json['filePath'] as String, baseDir);
+    final rawSegments = (json['segments'] as List<dynamic>? ?? const [])
+        .map((dynamic e) => _absolutePath(e as String, baseDir))
+        .toList(growable: false);
+    final segments = rawSegments.isNotEmpty ? rawSegments : <String>[filePath];
+    return HeldDictation(
+      id: json['id'] as String,
+      filePath: filePath,
+      duration: Duration(microseconds: json['durationMicros'] as int? ?? 0),
+      fileSizeBytes: json['fileSizeBytes'] as int? ?? 0,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      sequenceNumber: json['sequenceNumber'] as int? ?? 0,
+      tag: json['tag'] as String? ?? '',
+      segments: segments,
+    );
+  }
+
+  String _relativePath(String path, String baseDir) {
+    if (path.isEmpty) {
+      return path;
+    }
+    if (!p.isWithin(baseDir, path)) {
+      return path;
+    }
+    return p.relative(path, from: baseDir);
+  }
+
+  String _absolutePath(String path, String baseDir) {
+    if (path.isEmpty) {
+      return path;
+    }
+    if (p.isAbsolute(path)) {
+      return path;
+    }
+    return p.normalize(p.join(baseDir, path));
   }
 }
 
