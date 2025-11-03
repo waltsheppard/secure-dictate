@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -21,7 +23,13 @@ class JustAudioDictationPlayer implements DictationPlayer {
 
   @override
   Future<void> load(String filePath) async {
-    await _player.setFilePath(filePath);
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw FileSystemException('Dictation audio file missing', filePath);
+    }
+    await _player.stop();
+    final source = AudioSource.uri(Uri.file(file.path));
+    await _player.setAudioSource(source);
   }
 
   @override
