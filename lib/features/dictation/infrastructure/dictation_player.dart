@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
 abstract class DictationPlayer {
@@ -17,9 +19,35 @@ abstract class DictationPlayer {
 }
 
 class JustAudioDictationPlayer implements DictationPlayer {
-  JustAudioDictationPlayer([AudioPlayer? player]) : _player = player ?? AudioPlayer();
+  JustAudioDictationPlayer([AudioPlayer? player]) : _player = player ?? AudioPlayer() {
+    _initSession();
+  }
 
   final AudioPlayer _player;
+  Future<void>? _sessionInit;
+
+  void _initSession() {
+    _sessionInit ??= () async {
+      final session = await AudioSession.instance;
+      await session.configure(
+        const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions: {
+            AVAudioSessionCategoryOptions.defaultToSpeaker,
+            AVAudioSessionCategoryOptions.mixWithOthers,
+            AVAudioSessionCategoryOptions.allowBluetooth,
+          },
+          avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.speech,
+            usage: AndroidAudioUsage.voiceCommunication,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
+          androidWillPauseWhenDucked: true,
+        ),
+      );
+    }();
+  }
 
   @override
   Future<void> load(String filePath) async {
@@ -27,8 +55,15 @@ class JustAudioDictationPlayer implements DictationPlayer {
     if (!await file.exists()) {
       throw FileSystemException('Dictation audio file missing', filePath);
     }
+    if (_sessionInit != null) {
+      await _sessionInit;
+    }
+    final session = await AudioSession.instance;
+    if (!session.isActive) {
+      await session.setActive(true);
+    }
     await _player.stop();
-    final source = AudioSource.uri(Uri.file(file.path));
+    final source = AudioSource.file(file.path);
     await _player.setAudioSource(source);
   }
 
