@@ -491,11 +491,37 @@ class _ActionButtons extends StatelessWidget {
             icon: const Icon(Icons.delete),
             label: const Text('Delete'),
             style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: state.canDelete ? () => unawaited(onDelete()) : null,
+            onPressed: state.canDelete ? () => _confirmDelete(context) : null,
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Delete dictation?'),
+            content: const Text(
+              'This will permanently remove the current dictation from the device.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed == true) {
+      unawaited(onDelete());
+    }
   }
 }
 
