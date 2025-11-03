@@ -25,6 +25,16 @@ class DictationBody extends ConsumerStatefulWidget {
 }
 
 class _DictationBodyState extends ConsumerState<DictationBody> {
+  late final TextEditingController _tagController;
+  bool _isUpdatingTag = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tagController = TextEditingController();
+    _tagController.addListener(_handleTagChanged);
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<DictationState>(dictationControllerProvider, (previous, next) {
@@ -35,6 +45,14 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
           previousPath != null &&
           previous?.canPlayback == true) {
         unawaited(player.stop());
+      }
+      final nextTag = next.record?.tag ?? '';
+      if (nextTag != _tagController.text) {
+        _isUpdatingTag = true;
+        _tagController
+          ..text = nextTag
+          ..selection = TextSelection.collapsed(offset: nextTag.length);
+        _isUpdatingTag = false;
       }
     });
     final dictationState = ref.watch(dictationControllerProvider);
@@ -58,6 +76,11 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
           const SizedBox(height: 24),
           _RecordingStatus(state: dictationState),
           const SizedBox(height: 24),
+          _TagField(
+            controller: _tagController,
+            enabled: dictationState.record != null,
+          ),
+          const SizedBox(height: 24),
           _PlaybackCard(
             dictationState: dictationState,
             playerState: playerState,
@@ -79,6 +102,59 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
             _ErrorBanner(message: dictationState.errorMessage!),
           ],
         ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _tagController
+      ..removeListener(_handleTagChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleTagChanged() {
+    if (_isUpdatingTag) return;
+    var value = _tagController.text.toUpperCase();
+    if (value.length > 12) {
+      value = value.substring(0, 12);
+      _isUpdatingTag = true;
+      _tagController
+        ..text = value
+        ..selection = TextSelection.collapsed(offset: value.length);
+      _isUpdatingTag = false;
+    } else if (value != _tagController.text) {
+      _isUpdatingTag = true;
+      _tagController
+        ..text = value
+        ..selection = TextSelection.collapsed(offset: value.length);
+      _isUpdatingTag = false;
+    }
+    final dictation = ref.read(dictationControllerProvider);
+    if (dictation.record != null) {
+      ref.read(dictationControllerProvider.notifier).updateTag(value);
+    }
+  }
+}
+
+class _TagField extends StatelessWidget {
+  const _TagField({required this.controller, required this.enabled});
+
+  final TextEditingController controller;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      maxLength: 12,
+      decoration: const InputDecoration(
+        labelText: 'Dictation tag',
+        helperText: 'Up to 12 characters',
+        counterText: '',
+        border: OutlineInputBorder(),
       ),
     );
   }

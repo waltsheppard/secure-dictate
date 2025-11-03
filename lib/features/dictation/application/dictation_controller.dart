@@ -219,6 +219,16 @@ class DictationController extends StateNotifier<DictationState> {
     await _resetCurrentRecording(deleteFile: false);
   }
 
+  void updateTag(String tag) {
+    final record = state.record;
+    if (record == null) return;
+    final normalized = tag.trim();
+    if (normalized == record.tag) return;
+    state = state.copyWith(
+      record: record.copyWith(tag: normalized),
+    );
+  }
+
   Future<void> holdCurrent() async {
     if (!state.canHold) return;
     if (state.status != DictationSessionStatus.recording &&
