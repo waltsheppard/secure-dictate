@@ -35,13 +35,16 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
           previousPath != null &&
           previous?.canPlayback == true &&
           previousPath == next.filePath;
-      if (canPlayNow && !couldPlayBefore) {
-        player.load(next.filePath!);
+      final fileChanged =
+          previous?.fileSizeBytes != next.fileSizeBytes ||
+          previous?.duration != next.duration;
+      if (canPlayNow && (!couldPlayBefore || fileChanged)) {
+        unawaited(player.load(next.filePath!));
       }
       if (!canPlayNow &&
           previousPath != null &&
           previous?.canPlayback == true) {
-        player.stop();
+        unawaited(player.stop());
       }
     });
     final dictationState = ref.watch(dictationControllerProvider);
