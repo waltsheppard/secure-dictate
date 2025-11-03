@@ -21,7 +21,8 @@ class HeldDictationsScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
-            onPressed: () => ref.read(heldDictationsProvider.notifier).refresh(),
+            onPressed:
+                () => ref.read(heldDictationsProvider.notifier).refresh(),
           ),
         ],
       ),
@@ -29,7 +30,9 @@ class HeldDictationsScreen extends ConsumerWidget {
         data: (List<HeldDictation> held) {
           if (held.isEmpty) {
             return const Center(
-              child: Text('No held dictations. Hold a recording to see it here.'),
+              child: Text(
+                'No held dictations. Hold a recording to see it here.',
+              ),
             );
           }
           return ListView.builder(
@@ -39,7 +42,9 @@ class HeldDictationsScreen extends ConsumerWidget {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
-                  title: Text('#${upload.sequenceNumber.toString().padLeft(6, '0')} • ${upload.tag}'),
+                  title: Text(
+                    '#${upload.sequenceNumber.toString().padLeft(6, '0')} • ${upload.tag}',
+                  ),
                   subtitle: Text(
                     '${_formatDuration(upload.duration)} • ${_formatSize(upload.fileSizeBytes)}\nLast updated ${upload.updatedAt.toLocal()}',
                   ),
@@ -48,63 +53,114 @@ class HeldDictationsScreen extends ConsumerWidget {
                     onSelected: (action) {
                       switch (action) {
                         case _HeldAction.resume:
-                          _resumeHeld(context, ref, upload.id);
+                          unawaited(_resumeHeld(context, ref, upload));
                           break;
                         case _HeldAction.play:
-                          _playHeld(context, ref, upload.filePath);
+                          unawaited(_playHeld(context, ref, upload));
                           break;
                         case _HeldAction.delete:
-                          ref.read(heldDictationsProvider.notifier).delete(upload.id);
+                          ref
+                              .read(heldDictationsProvider.notifier)
+                              .delete(upload.id);
                           break;
                       }
                     },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: _HeldAction.resume, child: Text('Resume recording')),
-                      PopupMenuItem(value: _HeldAction.play, child: Text('Play back')),
-                      PopupMenuItem(value: _HeldAction.delete, child: Text('Delete')),
-                    ],
+                    itemBuilder:
+                        (context) => const [
+                          PopupMenuItem(
+                            value: _HeldAction.resume,
+                            child: Text('Resume recording'),
+                          ),
+                          PopupMenuItem(
+                            value: _HeldAction.play,
+                            child: Text('Play back'),
+                          ),
+                          PopupMenuItem(
+                            value: _HeldAction.delete,
+                            child: Text('Delete'),
+                          ),
+                        ],
                   ),
-                  onTap: () => _resumeHeld(context, ref, upload.id),
+                  onTap: () => unawaited(_resumeHeld(context, ref, upload)),
                 ),
               );
             },
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 32),
-                const SizedBox(height: 8),
-                Text(error.toString()),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => ref.read(heldDictationsProvider.notifier).refresh(),
-                  child: const Text('Retry'),
+        error:
+            (error, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 32,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(error.toString()),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed:
+                          () =>
+                              ref
+                                  .read(heldDictationsProvider.notifier)
+                                  .refresh(),
+                      child: const Text('Retry'),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
       ),
     );
   }
 
-  void _resumeHeld(BuildContext context, WidgetRef ref, String dictationId) {
+  Future<void> _resumeHeld(
+    BuildContext context,
+    WidgetRef ref,
+    HeldDictation held,
+  ) async {
     final controller = ref.read(dictationControllerProvider.notifier);
-    controller.resumeHeldFromStore(dictationId);
-    Navigator.of(context).pop();
+    try {
+      await controller.resumeHeldFromStore(held.id);
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to resume dictation: $error')),
+      );
+    }
   }
 
-  void _playHeld(BuildContext context, WidgetRef ref, String filePath) {
-    final player = ref.read(dictationPlayerControllerProvider.notifier);
-    unawaited(player.load(filePath));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Loaded held dictation for playback. Use the player on the main screen.')),
-    );
+  Future<void> _playHeld(
+    BuildContext context,
+    WidgetRef ref,
+    HeldDictation held,
+  ) async {
+    final controller = ref.read(dictationControllerProvider.notifier);
+    try {
+      await controller.loadHeldPreview(held);
+      final player = ref.read(dictationPlayerControllerProvider.notifier);
+      await player.load(held.filePath);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Loaded held dictation for playback. Use the player on the main screen.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to load dictation: $error')),
+      );
+    }
   }
 
   String _formatDuration(Duration value) {

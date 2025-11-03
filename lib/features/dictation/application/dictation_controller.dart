@@ -411,6 +411,52 @@ class DictationController extends StateNotifier<DictationState> {
     state = state.copyWith(duration: state.duration);
   }
 
+  Future<void> loadHeldPreview(HeldDictation held) async {
+    final file = File(held.filePath);
+    if (!await file.exists()) {
+      state = state.copyWith(
+        errorMessage: 'Held file missing: ${held.filePath}',
+      );
+      return;
+    }
+    _segmentPaths
+      ..clear()
+      ..addAll(held.segments);
+    _finalFilePath = held.filePath;
+    _activeSegmentPath = null;
+    _accumulatedDuration = held.duration;
+    _durationTimer?.cancel();
+    _stopwatch
+      ..stop()
+      ..reset();
+    await _mergeSegments();
+    state = state.copyWith(
+      status: DictationSessionStatus.ready,
+      dictationId: held.id,
+      filePath: held.filePath,
+      duration: held.duration,
+      fileSizeBytes: held.fileSizeBytes,
+      isHeld: true,
+      hasQueuedUpload: false,
+      uploadStatus: DictationUploadStatus.held,
+      clearCurrentUpload: true,
+      clearErrorMessage: true,
+      record: DictationRecord(
+        id: held.id,
+        filePath: held.filePath,
+        status: DictationSessionStatus.holding,
+        duration: held.duration,
+        fileSizeBytes: held.fileSizeBytes,
+        createdAt: held.createdAt,
+        updatedAt: DateTime.now().toUtc(),
+        segments: List<String>.from(_segmentPaths),
+        sequenceNumber: held.sequenceNumber,
+        tag: held.tag,
+      ),
+    );
+    _notifyPlaybackUpdate();
+  }
+
   Future<void> refreshQueueStatus() async {
     final dictationId = state.dictationId;
     if (dictationId == null) return;
