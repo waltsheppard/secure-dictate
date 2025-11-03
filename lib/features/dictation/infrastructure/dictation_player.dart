@@ -157,7 +157,11 @@ class JustAudioDictationPlayer implements DictationPlayer {
     final directory = source.parent;
     final baseName = p.basenameWithoutExtension(source.path);
     final extension = p.extension(source.path);
-    final copyPath = p.join(directory.path, '${baseName}_playback$extension');
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    final copyPath = p.join(
+      directory.path,
+      '${baseName}_playback_$timestamp$extension',
+    );
     final copyFile = File(copyPath);
     if (await copyFile.exists()) {
       await copyFile.delete();
