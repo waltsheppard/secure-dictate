@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -117,7 +118,16 @@ class JustAudioDictationPlayer implements DictationPlayer {
     if (await copyFile.exists()) {
       await copyFile.delete();
     }
-    return source.copy(copyPath);
+    final bytes = await source.readAsBytes();
+    if (bytes.length >= 44) {
+      final byteData = ByteData.sublistView(bytes);
+      final dataSize = bytes.length - 44;
+      final chunkSize = dataSize + 36;
+      byteData.setUint32(4, chunkSize, Endian.little);
+      byteData.setUint32(40, dataSize, Endian.little);
+    }
+    await copyFile.writeAsBytes(bytes, flush: true);
+    return copyFile;
   }
 
   Future<void> _deletePlaybackCopy() async {
