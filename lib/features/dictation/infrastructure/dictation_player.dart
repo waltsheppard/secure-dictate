@@ -32,7 +32,21 @@ class JustAudioDictationPlayer implements DictationPlayer {
   void _initSession() {
     _sessionInit ??= () async {
       final session = await AudioSession.instance;
-      await session.configure(AudioSessionConfiguration.speech());
+      final config = AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.allowBluetooth |
+            AVAudioSessionCategoryOptions.allowBluetoothA2DP |
+            AVAudioSessionCategoryOptions.defaultToSpeaker |
+            AVAudioSessionCategoryOptions.mixWithOthers,
+        avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+        androidAudioAttributes: const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          usage: AndroidAudioUsage.voiceCommunication,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
+        androidWillPauseWhenDucked: true,
+      );
+      await session.configure(config);
     }();
   }
 
@@ -62,8 +76,9 @@ class JustAudioDictationPlayer implements DictationPlayer {
       await _player.setFilePath(playbackTarget.path);
       _playbackCopy = playbackTarget;
     } on PlayerException catch (error) {
+      final stat = await playbackTarget.stat();
       throw FileSystemException(
-        'Unable to load dictation audio (${error.code}): ${error.message}',
+        'Unable to load dictation audio (${error.code}): ${error.message} (size=${stat.size})',
         playbackTarget.path,
       );
     } on PlayerInterruptedException catch (error) {
@@ -119,6 +134,9 @@ class JustAudioDictationPlayer implements DictationPlayer {
       await copyFile.delete();
     }
     final bytes = await source.readAsBytes();
+    if (bytes.isEmpty) {
+      throw const FileSystemException('Dictation audio file is empty');
+    }
     if (bytes.length >= 44) {
       final byteData = ByteData.sublistView(bytes);
       final dataSize = bytes.length - 44;
