@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../domain/held_dictation.dart';
 import '../infrastructure/dictation_local_store.dart';
 
-class HeldDictationsController extends StateNotifier<AsyncValue<List<HeldDictation>>> {
+class HeldDictationsController
+    extends StateNotifier<AsyncValue<List<HeldDictation>>> {
   HeldDictationsController(this._ref) : super(const AsyncLoading()) {
     refresh();
   }
@@ -48,7 +49,7 @@ class HeldDictationsController extends StateNotifier<AsyncValue<List<HeldDictati
   }
 }
 
-final heldDictationsProvider =
-    StateNotifierProvider<HeldDictationsController, AsyncValue<List<HeldDictation>>>(
-  (ref) => HeldDictationsController(ref),
-);
+final heldDictationsProvider = StateNotifierProvider<
+  HeldDictationsController,
+  AsyncValue<List<HeldDictation>>
+>((ref) => HeldDictationsController(ref));

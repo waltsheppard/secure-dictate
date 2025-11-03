@@ -34,7 +34,8 @@ class DictationController extends StateNotifier<DictationState> {
 
   DictationRecorder get _recorder => _ref.read(dictationRecorderProvider);
   DictationLocalStore get _store => _ref.read(dictationLocalStoreProvider);
-  DictationQueueWorker get _queueWorker => _ref.read(dictationQueueWorkerProvider);
+  DictationQueueWorker get _queueWorker =>
+      _ref.read(dictationQueueWorkerProvider);
 
   Future<void> startRecording() async {
     if (!state.canRecord) {
@@ -172,7 +173,9 @@ class DictationController extends StateNotifier<DictationState> {
       }
       final file = File(path);
       if (!await file.exists()) {
-        throw const FileSystemException('Dictation file missing before upload.');
+        throw const FileSystemException(
+          'Dictation file missing before upload.',
+        );
       }
       final fileSize = await file.length();
       final checksum = await _computeSha256(path);
@@ -313,10 +316,13 @@ class DictationController extends StateNotifier<DictationState> {
       state = state.copyWith(errorMessage: 'Held dictation not found.');
       return;
     }
-    final segmentList = held.segments.isNotEmpty ? held.segments : [held.filePath];
+    final segmentList =
+        held.segments.isNotEmpty ? held.segments : [held.filePath];
     for (final segmentPath in segmentList) {
       if (!await File(segmentPath).exists()) {
-        state = state.copyWith(errorMessage: 'Held segment missing: $segmentPath');
+        state = state.copyWith(
+          errorMessage: 'Held segment missing: $segmentPath',
+        );
         return;
       }
     }
@@ -334,7 +340,8 @@ class DictationController extends StateNotifier<DictationState> {
       state = state.copyWith(
         status: DictationSessionStatus.ready,
         isHeld: false,
-        errorMessage: 'Unable to resume the previous session. Start a new recording.',
+        errorMessage:
+            'Unable to resume the previous session. Start a new recording.',
       );
       return;
     }
@@ -425,7 +432,9 @@ class DictationController extends StateNotifier<DictationState> {
   Future<void> _updateMetrics() async {
     final path = _finalFilePath ?? state.filePath;
     if (path == null) return;
-    final duration = _accumulatedDuration + (_stopwatch.isRunning ? _stopwatch.elapsed : Duration.zero);
+    final duration =
+        _accumulatedDuration +
+        (_stopwatch.isRunning ? _stopwatch.elapsed : Duration.zero);
     var size = await _safeFileSize(path);
     if (size == 0) {
       size = await _totalSegmentSize();
@@ -619,4 +628,6 @@ class DictationController extends StateNotifier<DictationState> {
 }
 
 final dictationControllerProvider =
-    StateNotifierProvider<DictationController, DictationState>((ref) => DictationController(ref));
+    StateNotifierProvider<DictationController, DictationState>(
+      (ref) => DictationController(ref),
+    );

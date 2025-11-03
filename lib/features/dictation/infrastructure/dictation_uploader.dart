@@ -11,21 +11,28 @@ abstract class DictationUploader {
 
 class AmplifyDictationUploader implements DictationUploader {
   @override
-  Future<void> upload(DictationUpload upload, {Map<String, String>? metadata}) async {
+  Future<void> upload(
+    DictationUpload upload, {
+    Map<String, String>? metadata,
+  }) async {
     if (Amplify.Storage.plugins.isEmpty) {
-      throw const StorageNotConfiguredException('Amplify Storage plugin has not been added.');
+      throw const StorageNotConfiguredException(
+        'Amplify Storage plugin has not been added.',
+      );
     }
     final file = File(upload.filePath);
     if (!await file.exists()) {
       throw StorageFileNotFoundException('File not found: ${upload.filePath}');
     }
-    final storageKey = 'dictations/${upload.id}${_extensionFor(upload.filePath)}';
+    final storageKey =
+        'dictations/${upload.id}${_extensionFor(upload.filePath)}';
     final awsFile = AWSFile.fromPath(upload.filePath);
-    await Amplify.Storage.uploadFile(
+    final uploadOp = Amplify.Storage.uploadFile(
       localFile: awsFile,
       path: StoragePath.fromString(storageKey),
       options: StorageUploadFileOptions(metadata: metadata ?? const {}),
     );
+    await uploadOp.result;
     // Placeholder for metadata persistence. Later this should call an API or AppSync mutation.
     if (Amplify.API.plugins.isEmpty) {
       // Skip metadata upload until API configured.
@@ -40,10 +47,9 @@ class AmplifyDictationUploader implements DictationUploader {
       'metadata': upload.metadata,
       'recordedAt': upload.createdAt.toIso8601String(),
     };
-    await Amplify.API.post(
-      '/dictations',
-      body: HttpPayload.json(payload),
-    ).response;
+    await Amplify.API
+        .post('/dictations', body: HttpPayload.json(payload))
+        .response;
   }
 
   String _extensionFor(String path) {

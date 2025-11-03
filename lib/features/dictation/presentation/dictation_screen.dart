@@ -11,12 +11,8 @@ class DictationScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Secure Dictation'),
-      ),
-      body: SafeArea(
-        child: DictationBody(),
-      ),
+      appBar: AppBar(title: const Text('Secure Dictation')),
+      body: SafeArea(child: DictationBody()),
     );
   }
 }
@@ -31,26 +27,29 @@ class DictationBody extends ConsumerStatefulWidget {
 class _DictationBodyState extends ConsumerState<DictationBody> {
   @override
   Widget build(BuildContext context) {
-    ref.listen<DictationState>(
-      dictationControllerProvider,
-      (previous, next) {
-        final player = ref.read(dictationPlayerControllerProvider.notifier);
-        final previousPath = previous?.filePath;
-        final canPlayNow = next.filePath != null && next.canPlayback;
-        final couldPlayBefore =
-            previousPath != null && previous?.canPlayback == true && previousPath == next.filePath;
-        if (canPlayNow && !couldPlayBefore) {
-          player.load(next.filePath!);
-        }
-        if (!canPlayNow && previousPath != null && previous?.canPlayback == true) {
-          player.stop();
-        }
-      },
-    );
+    ref.listen<DictationState>(dictationControllerProvider, (previous, next) {
+      final player = ref.read(dictationPlayerControllerProvider.notifier);
+      final previousPath = previous?.filePath;
+      final canPlayNow = next.filePath != null && next.canPlayback;
+      final couldPlayBefore =
+          previousPath != null &&
+          previous?.canPlayback == true &&
+          previousPath == next.filePath;
+      if (canPlayNow && !couldPlayBefore) {
+        player.load(next.filePath!);
+      }
+      if (!canPlayNow &&
+          previousPath != null &&
+          previous?.canPlayback == true) {
+        player.stop();
+      }
+    });
     final dictationState = ref.watch(dictationControllerProvider);
     final dictationController = ref.read(dictationControllerProvider.notifier);
     final playerState = ref.watch(dictationPlayerControllerProvider);
-    final playerController = ref.read(dictationPlayerControllerProvider.notifier);
+    final playerController = ref.read(
+      dictationPlayerControllerProvider.notifier,
+    );
     final queueState = ref.watch(dictationQueueProvider);
 
     return SingleChildScrollView(
@@ -84,9 +83,12 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
             onDelete: dictationController.deleteCurrent,
           ),
           const SizedBox(height: 24),
-          _QueueSummary(queueState: queueState, onRefresh: () {
-            ref.read(dictationQueueProvider.notifier).refresh();
-          }),
+          _QueueSummary(
+            queueState: queueState,
+            onRefresh: () {
+              ref.read(dictationQueueProvider.notifier).refresh();
+            },
+          ),
           if (dictationState.errorMessage != null) ...[
             const SizedBox(height: 24),
             _ErrorBanner(message: dictationState.errorMessage!),
@@ -166,13 +168,15 @@ class _RecordingStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final record = state.record;
-    final sequenceLabel = record != null && record.sequenceNumber > 0
-        ? '#${record.sequenceNumber.toString().padLeft(6, '0')}'
-        : 'Unnumbered';
-    final tagLabel = record != null && record.tag.isNotEmpty ? record.tag : 'N/A';
+    final sequenceLabel =
+        record != null && record.sequenceNumber > 0
+            ? '#${record.sequenceNumber.toString().padLeft(6, '0')}'
+            : 'Unnumbered';
+    final tagLabel =
+        record != null && record.tag.isNotEmpty ? record.tag : 'N/A';
     return Card(
       elevation: 0,
-      color: theme.colorScheme.surfaceVariant,
+      color: theme.colorScheme.surfaceContainerHighest,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -180,19 +184,29 @@ class _RecordingStatus extends StatelessWidget {
           children: [
             Text(
               '$sequenceLabel • $tagLabel',
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               _statusLabel(state.status, state.uploadStatus),
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _InfoChip(label: 'Duration', value: _formatDuration(state.duration)),
-                _InfoChip(label: 'Size', value: _formatSize(state.fileSizeBytes)),
+                _InfoChip(
+                  label: 'Duration',
+                  value: _formatDuration(state.duration),
+                ),
+                _InfoChip(
+                  label: 'Size',
+                  value: _formatSize(state.fileSizeBytes),
+                ),
               ],
             ),
           ],
@@ -201,18 +215,31 @@ class _RecordingStatus extends StatelessWidget {
     );
   }
 
-  String _statusLabel(DictationSessionStatus status, DictationUploadStatus? uploadStatus) {
+  String _statusLabel(
+    DictationSessionStatus status,
+    DictationUploadStatus? uploadStatus,
+  ) {
     switch (status) {
       case DictationSessionStatus.recording:
         return 'Recording in progress';
       case DictationSessionStatus.paused:
         return 'Recording paused';
       case DictationSessionStatus.ready:
-        if (uploadStatus == DictationUploadStatus.uploading) return 'Uploading…';
-        if (uploadStatus == DictationUploadStatus.completed) return 'Uploaded';
-        if (uploadStatus == DictationUploadStatus.failed) return 'Upload failed';
-        if (uploadStatus == DictationUploadStatus.held) return 'Held locally';
-        if (uploadStatus == DictationUploadStatus.pending) return 'Ready to submit';
+        if (uploadStatus == DictationUploadStatus.uploading) {
+          return 'Uploading…';
+        }
+        if (uploadStatus == DictationUploadStatus.completed) {
+          return 'Uploaded';
+        }
+        if (uploadStatus == DictationUploadStatus.failed) {
+          return 'Upload failed';
+        }
+        if (uploadStatus == DictationUploadStatus.held) {
+          return 'Held locally';
+        }
+        if (uploadStatus == DictationUploadStatus.pending) {
+          return 'Ready to submit';
+        }
         return 'Ready';
       case DictationSessionStatus.holding:
         return 'Held locally';
@@ -259,16 +286,21 @@ class _PlaybackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canInteract = dictationState.canPlayback && playerState.filePath != null;
+    final canInteract =
+        dictationState.canPlayback && playerState.filePath != null;
     final position = playerState.position;
     final duration = playerState.duration ?? dictationState.duration;
-    final progress = duration.inMilliseconds == 0
-        ? 0.0
-        : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+    final progress =
+        duration.inMilliseconds == 0
+            ? 0.0
+            : (position.inMilliseconds / duration.inMilliseconds).clamp(
+              0.0,
+              1.0,
+            );
 
     return Card(
       elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceVariant,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -276,18 +308,24 @@ class _PlaybackCard extends StatelessWidget {
           children: [
             Text(
               'Playback',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Slider(
               value: progress.isNaN ? 0 : progress,
-              onChanged: canInteract
-                  ? (value) => unawaited(
+              onChanged:
+                  canInteract
+                      ? (value) => unawaited(
                         onSeek(
-                          Duration(milliseconds: (duration.inMilliseconds * value).round()),
+                          Duration(
+                            milliseconds:
+                                (duration.inMilliseconds * value).round(),
+                          ),
                         ),
                       )
-                  : null,
+                      : null,
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -300,21 +338,25 @@ class _PlaybackCard extends StatelessWidget {
             Align(
               alignment: Alignment.center,
               child: FilledButton.icon(
-                onPressed: !canInteract
-                    ? null
-                    : () async {
-                        final currentPath = dictationState.filePath;
-                        if (currentPath != null && currentPath != playerState.filePath) {
-                          await onLoad(currentPath);
-                          await onSeek(Duration.zero);
-                        }
-                        if (playerState.isPlaying) {
-                          await onPause();
-                        } else {
-                          await onPlay();
-                        }
-                      },
-                icon: Icon(playerState.isPlaying ? Icons.pause : Icons.play_arrow),
+                onPressed:
+                    !canInteract
+                        ? null
+                        : () async {
+                          final currentPath = dictationState.filePath;
+                          if (currentPath != null &&
+                              currentPath != playerState.filePath) {
+                            await onLoad(currentPath);
+                            await onSeek(Duration.zero);
+                          }
+                          if (playerState.isPlaying) {
+                            await onPause();
+                          } else {
+                            await onPlay();
+                          }
+                        },
+                icon: Icon(
+                  playerState.isPlaying ? Icons.pause : Icons.play_arrow,
+                ),
                 label: Text(playerState.isPlaying ? 'Pause' : 'Play'),
               ),
             ),
@@ -322,7 +364,9 @@ class _PlaybackCard extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 playerState.errorMessage!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.red),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.red),
               ),
             ],
           ],
@@ -355,7 +399,8 @@ class _ActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isHeld = state.isHeld || state.status == DictationSessionStatus.holding;
+    final isHeld =
+        state.isHeld || state.status == DictationSessionStatus.holding;
     final canToggleHold = isHeld || state.canHold;
     return Row(
       children: [
@@ -363,7 +408,10 @@ class _ActionButtons extends StatelessWidget {
           child: FilledButton.icon(
             icon: const Icon(Icons.cloud_upload),
             label: const Text('Submit'),
-            onPressed: state.canSubmit ? () => unawaited(onSubmit(metadata: const {})) : null,
+            onPressed:
+                state.canSubmit
+                    ? () => unawaited(onSubmit(metadata: const {}))
+                    : null,
           ),
         ),
         const SizedBox(width: 12),
@@ -371,9 +419,10 @@ class _ActionButtons extends StatelessWidget {
           child: OutlinedButton.icon(
             icon: Icon(isHeld ? Icons.play_circle : Icons.pause_circle),
             label: Text(isHeld ? 'Resume Recording' : 'Hold'),
-            onPressed: canToggleHold
-                ? () => unawaited(isHeld ? onResumeHeld() : onHold())
-                : null,
+            onPressed:
+                canToggleHold
+                    ? () => unawaited(isHeld ? onResumeHeld() : onHold())
+                    : null,
           ),
         ),
         const SizedBox(width: 12),
@@ -410,8 +459,9 @@ class _QueueSummary extends StatelessWidget {
               children: [
                 Text(
                   'Upload Queue',
-                  style:
-                      Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh),
@@ -438,9 +488,13 @@ class _QueueSummary extends StatelessWidget {
                           subtitle: Text(
                             '${_statusLabel(upload.status)} • ${_formatSize(upload.fileSizeBytes)} • ${_formatDuration(upload.duration)} • ${_shortId(upload.id)}',
                           ),
-                          trailing: upload.status == DictationUploadStatus.failed
-                              ? Icon(Icons.error, color: Theme.of(context).colorScheme.error)
-                              : null,
+                          trailing:
+                              upload.status == DictationUploadStatus.failed
+                                  ? Icon(
+                                    Icons.error,
+                                    color: Theme.of(context).colorScheme.error,
+                                  )
+                                  : null,
                         ),
                       )
                       .toList(growable: false),
@@ -537,7 +591,9 @@ class _InfoChip extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           value,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
       ],
     );
@@ -559,15 +615,17 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, color: Theme.of(context).colorScheme.onErrorContainer),
+          Icon(
+            Icons.error_outline,
+            color: Theme.of(context).colorScheme.onErrorContainer,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               message,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Theme.of(context).colorScheme.onErrorContainer),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
             ),
           ),
         ],

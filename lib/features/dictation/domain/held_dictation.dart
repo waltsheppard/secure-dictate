@@ -46,24 +46,25 @@ class HeldDictation {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'filePath': filePath,
-        'durationMicros': duration.inMicroseconds,
-        'fileSizeBytes': fileSizeBytes,
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
-        'sequenceNumber': sequenceNumber,
-        'tag': tag,
-        'segments': segments,
-      };
+    'id': id,
+    'filePath': filePath,
+    'durationMicros': duration.inMicroseconds,
+    'fileSizeBytes': fileSizeBytes,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'sequenceNumber': sequenceNumber,
+    'tag': tag,
+    'segments': segments,
+  };
 
   factory HeldDictation.fromJson(Map<String, dynamic> json) {
     final rawSegments = (json['segments'] as List<dynamic>? ?? const [])
         .map((dynamic e) => e as String)
         .toList(growable: false);
-    final segments = rawSegments.isNotEmpty
-        ? rawSegments
-        : <String>[json['filePath'] as String];
+    final segments =
+        rawSegments.isNotEmpty
+            ? rawSegments
+            : <String>[json['filePath'] as String];
     return HeldDictation(
       id: json['id'] as String,
       filePath: json['filePath'] as String,

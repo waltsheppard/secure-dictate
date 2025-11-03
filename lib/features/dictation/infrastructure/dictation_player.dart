@@ -21,7 +21,8 @@ abstract class DictationPlayer {
 }
 
 class JustAudioDictationPlayer implements DictationPlayer {
-  JustAudioDictationPlayer([AudioPlayer? player]) : _player = player ?? AudioPlayer() {
+  JustAudioDictationPlayer([AudioPlayer? player])
+    : _player = player ?? AudioPlayer() {
     _initSession();
   }
 
@@ -34,8 +35,8 @@ class JustAudioDictationPlayer implements DictationPlayer {
       final session = await AudioSession.instance;
       final config = AudioSessionConfiguration(
         avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.allowBluetooth |
-            AVAudioSessionCategoryOptions.allowBluetoothA2DP |
+        avAudioSessionCategoryOptions:
+            AVAudioSessionCategoryOptions.allowBluetooth |
             AVAudioSessionCategoryOptions.defaultToSpeaker |
             AVAudioSessionCategoryOptions.mixWithOthers,
         avAudioSessionMode: AVAudioSessionMode.spokenAudio,
@@ -43,7 +44,8 @@ class JustAudioDictationPlayer implements DictationPlayer {
           contentType: AndroidAudioContentType.speech,
           usage: AndroidAudioUsage.voiceCommunication,
         ),
-        androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
+        androidAudioFocusGainType:
+            AndroidAudioFocusGainType.gainTransientMayDuck,
         androidWillPauseWhenDucked: true,
       );
       await session.configure(config);
@@ -62,7 +64,8 @@ class JustAudioDictationPlayer implements DictationPlayer {
     final session = await AudioSession.instance;
     await session.setActive(
       true,
-      avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
+      avAudioSessionSetActiveOptions:
+          AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
     );
     await _player.stop();
     await _deletePlaybackCopy();
@@ -70,7 +73,10 @@ class JustAudioDictationPlayer implements DictationPlayer {
     try {
       playbackTarget = await _preparePlaybackCopy(file);
     } on FileSystemException catch (error) {
-      throw FileSystemException('Unable to stage dictation for playback: ${error.message}', error.path);
+      throw FileSystemException(
+        'Unable to stage dictation for playback: ${error.message}',
+        error.path,
+      );
     }
     try {
       await _player.setFilePath(playbackTarget.path);
