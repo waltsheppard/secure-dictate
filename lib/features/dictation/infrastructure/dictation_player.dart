@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:path/path.dart' as p;
 
 abstract class DictationPlayer {
   Future<void> load(String filePath);
@@ -25,25 +26,12 @@ class JustAudioDictationPlayer implements DictationPlayer {
 
   final AudioPlayer _player;
   Future<void>? _sessionInit;
+  File? _playbackCopy;
 
   void _initSession() {
     _sessionInit ??= () async {
       final session = await AudioSession.instance;
-      await session.configure(
-        AudioSessionConfiguration(
-          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.allowBluetooth |
-              AVAudioSessionCategoryOptions.defaultToSpeaker |
-              AVAudioSessionCategoryOptions.mixWithOthers,
-          avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-          androidAudioAttributes: const AndroidAudioAttributes(
-            contentType: AndroidAudioContentType.speech,
-            usage: AndroidAudioUsage.voiceCommunication,
-          ),
-          androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
-          androidWillPauseWhenDucked: true,
-        ),
-      );
+      await session.configure(AudioSessionConfiguration.speech());
     }();
   }
 
@@ -57,10 +45,32 @@ class JustAudioDictationPlayer implements DictationPlayer {
       await _sessionInit;
     }
     final session = await AudioSession.instance;
-    await session.setActive(true);
+    await session.setActive(
+      true,
+      avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
+    );
     await _player.stop();
-    final source = AudioSource.file(file.path);
-    await _player.setAudioSource(source);
+    await _deletePlaybackCopy();
+    File playbackTarget;
+    try {
+      playbackTarget = await _preparePlaybackCopy(file);
+    } on FileSystemException catch (error) {
+      throw FileSystemException('Unable to stage dictation for playback: ${error.message}', error.path);
+    }
+    try {
+      await _player.setFilePath(playbackTarget.path);
+      _playbackCopy = playbackTarget;
+    } on PlayerException catch (error) {
+      throw FileSystemException(
+        'Unable to load dictation audio (${error.code}): ${error.message}',
+        playbackTarget.path,
+      );
+    } on PlayerInterruptedException catch (error) {
+      throw FileSystemException(
+        'Playback interrupted: ${error.message ?? 'unknown reason'}',
+        playbackTarget.path,
+      );
+    }
   }
 
   @override
@@ -70,7 +80,12 @@ class JustAudioDictationPlayer implements DictationPlayer {
   Future<void> play() => _player.play();
 
   @override
-  Future<void> stop() => _player.stop();
+  Future<void> stop() async {
+    await _player.stop();
+    final session = await AudioSession.instance;
+    await session.setActive(false);
+    await _deletePlaybackCopy();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
@@ -88,7 +103,36 @@ class JustAudioDictationPlayer implements DictationPlayer {
   Future<Duration?> position() async => _player.position;
 
   @override
-  Future<void> dispose() => _player.dispose();
+  Future<void> dispose() async {
+    await _player.dispose();
+    await _deletePlaybackCopy();
+  }
+
+  Future<File> _preparePlaybackCopy(File source) async {
+    final directory = source.parent;
+    final baseName = p.basenameWithoutExtension(source.path);
+    final extension = p.extension(source.path);
+    final copyPath = p.join(directory.path, '${baseName}_playback$extension');
+    final copyFile = File(copyPath);
+    if (await copyFile.exists()) {
+      await copyFile.delete();
+    }
+    return source.copy(copyPath);
+  }
+
+  Future<void> _deletePlaybackCopy() async {
+    final file = _playbackCopy;
+    if (file != null) {
+      _playbackCopy = null;
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {
+          // best effort cleanup
+        }
+      }
+    }
+  }
 }
 
 final dictationPlayerProvider = Provider<DictationPlayer>((ref) {
