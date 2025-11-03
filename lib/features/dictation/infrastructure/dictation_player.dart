@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 
@@ -29,6 +30,7 @@ class JustAudioDictationPlayer implements DictationPlayer {
   final AudioPlayer _player;
   Future<void>? _sessionInit;
   File? _playbackCopy;
+  bool _sessionActivated = false;
 
   void _initSession() {
     _sessionInit ??= () async {
@@ -67,6 +69,7 @@ class JustAudioDictationPlayer implements DictationPlayer {
       avAudioSessionSetActiveOptions:
           AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
     );
+    _sessionActivated = true;
     await _player.stop();
     await _deletePlaybackCopy();
     File playbackTarget;
@@ -105,7 +108,15 @@ class JustAudioDictationPlayer implements DictationPlayer {
   Future<void> stop() async {
     await _player.stop();
     final session = await AudioSession.instance;
-    await session.setActive(false);
+    if (_sessionActivated) {
+      try {
+        await session.setActive(false);
+      } on PlatformException catch (error) {
+        debugPrint('Failed to deactivate audio session: ${error.message}');
+      } finally {
+        _sessionActivated = false;
+      }
+    }
     await _deletePlaybackCopy();
   }
 
@@ -128,6 +139,18 @@ class JustAudioDictationPlayer implements DictationPlayer {
   Future<void> dispose() async {
     await _player.dispose();
     await _deletePlaybackCopy();
+    if (_sessionActivated) {
+      final session = await AudioSession.instance;
+      try {
+        await session.setActive(false);
+      } on PlatformException catch (error) {
+        debugPrint(
+          'Failed to deactivate audio session on dispose: ${error.message}',
+        );
+      } finally {
+        _sessionActivated = false;
+      }
+    }
   }
 
   Future<File> _preparePlaybackCopy(File source) async {

@@ -215,6 +215,7 @@ class DictationController extends StateNotifier<DictationState> {
       );
       rethrow;
     }
+    await _resetCurrentRecording(deleteFile: false);
   }
 
   Future<void> holdCurrent() async {
@@ -259,6 +260,7 @@ class DictationController extends StateNotifier<DictationState> {
       await _store.upsertHeld(held);
       _ref.read(heldDictationsProvider.notifier).refresh();
     }
+    await _resetCurrentRecording(deleteFile: false);
   }
 
   Future<void> resumeHeld() async {
