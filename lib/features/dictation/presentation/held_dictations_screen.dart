@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/held_dictations_controller.dart';
 import '../application/dictation_controller.dart';
-import '../application/dictation_player_controller.dart';
 import '../domain/held_dictation.dart';
 
 class HeldDictationsScreen extends ConsumerWidget {
@@ -55,9 +54,6 @@ class HeldDictationsScreen extends ConsumerWidget {
                         case _HeldAction.resume:
                           unawaited(_resumeHeld(context, ref, upload));
                           break;
-                        case _HeldAction.play:
-                          unawaited(_playHeld(context, ref, upload));
-                          break;
                         case _HeldAction.delete:
                           ref
                               .read(heldDictationsProvider.notifier)
@@ -70,10 +66,6 @@ class HeldDictationsScreen extends ConsumerWidget {
                           PopupMenuItem(
                             value: _HeldAction.resume,
                             child: Text('Resume recording'),
-                          ),
-                          PopupMenuItem(
-                            value: _HeldAction.play,
-                            child: Text('Play back'),
                           ),
                           PopupMenuItem(
                             value: _HeldAction.delete,
@@ -137,32 +129,6 @@ class HeldDictationsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _playHeld(
-    BuildContext context,
-    WidgetRef ref,
-    HeldDictation held,
-  ) async {
-    final controller = ref.read(dictationControllerProvider.notifier);
-    try {
-      await controller.loadHeldPreview(held);
-      final player = ref.read(dictationPlayerControllerProvider.notifier);
-      await player.load(held.filePath);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Loaded held dictation for playback. Use the player on the main screen.',
-          ),
-        ),
-      );
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to load dictation: $error')),
-      );
-    }
-  }
-
   String _formatDuration(Duration value) {
     final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -182,4 +148,4 @@ class HeldDictationsScreen extends ConsumerWidget {
   }
 }
 
-enum _HeldAction { resume, play, delete }
+enum _HeldAction { resume, delete }
