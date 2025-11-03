@@ -32,11 +32,9 @@ class JustAudioDictationPlayer implements DictationPlayer {
       await session.configure(
         const AudioSessionConfiguration(
           avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-          avAudioSessionCategoryOptions: {
-            AVAudioSessionCategoryOptions.defaultToSpeaker,
-            AVAudioSessionCategoryOptions.mixWithOthers,
-            AVAudioSessionCategoryOptions.allowBluetooth,
-          },
+          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.allowBluetooth |
+              AVAudioSessionCategoryOptions.defaultToSpeaker |
+              AVAudioSessionCategoryOptions.mixWithOthers,
           avAudioSessionMode: AVAudioSessionMode.spokenAudio,
           androidAudioAttributes: AndroidAudioAttributes(
             contentType: AndroidAudioContentType.speech,
@@ -59,9 +57,7 @@ class JustAudioDictationPlayer implements DictationPlayer {
       await _sessionInit;
     }
     final session = await AudioSession.instance;
-    if (!session.isActive) {
-      await session.setActive(true);
-    }
+    await session.setActive(true);
     await _player.stop();
     final source = AudioSource.file(file.path);
     await _player.setAudioSource(source);
