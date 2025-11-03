@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
+import 'package:path/path.dart' as p;
 
 import '../domain/dictation_record.dart';
 import '../infrastructure/audio_recorder.dart';
@@ -26,6 +28,9 @@ class DictationController extends StateNotifier<DictationState> {
   final Stopwatch _stopwatch = Stopwatch();
   Duration _accumulatedDuration = Duration.zero;
   final Random _tagRandom = Random.secure();
+  String? _finalFilePath;
+  String? _activeSegmentPath;
+  final List<String> _segmentPaths = [];
 
   DictationRecorder get _recorder => _ref.read(dictationRecorderProvider);
   DictationLocalStore get _store => _ref.read(dictationLocalStoreProvider);
@@ -41,12 +46,18 @@ class DictationController extends StateNotifier<DictationState> {
     final tag = _generateTag();
     final fileBaseName =
         '${sequenceNumber.toString().padLeft(6, '0')}_${tag}_$dictationId';
-    final filePath = await _store.allocateFilePath(
+    final finalFilePath = await _store.allocateFilePath(
       dictationId,
       fileName: fileBaseName,
     );
+    await _deleteFileIfExists(finalFilePath);
+    _finalFilePath = finalFilePath;
+    _segmentPaths
+      ..clear()
+      ..add(_segmentPathForIndex(finalFilePath, 1));
+    _activeSegmentPath = _segmentPaths.last;
     final now = DateTime.now().toUtc();
-    await _recorder.startRecording(filePath: filePath);
+    await _recorder.startRecording(filePath: _activeSegmentPath!);
     _accumulatedDuration = Duration.zero;
     _stopwatch
       ..reset()
@@ -55,7 +66,7 @@ class DictationController extends StateNotifier<DictationState> {
     state = state.copyWith(
       status: DictationSessionStatus.recording,
       dictationId: dictationId,
-      filePath: filePath,
+      filePath: finalFilePath,
       duration: Duration.zero,
       fileSizeBytes: 0,
       isHeld: false,
@@ -65,13 +76,13 @@ class DictationController extends StateNotifier<DictationState> {
       clearErrorMessage: true,
       record: DictationRecord(
         id: dictationId,
-        filePath: filePath,
+        filePath: finalFilePath,
         status: DictationSessionStatus.recording,
         duration: Duration.zero,
         fileSizeBytes: 0,
         createdAt: now,
         updatedAt: now,
-        segments: [filePath],
+        segments: List<String>.from(_segmentPaths),
         sequenceNumber: sequenceNumber,
         tag: tag,
       ),
@@ -79,27 +90,32 @@ class DictationController extends StateNotifier<DictationState> {
   }
 
   Future<void> pauseRecording() async {
-    if (!state.canPause) return;
-    if (state.status == DictationSessionStatus.recording) {
-      await _recorder.pauseRecording();
+    if (!state.canPause || state.status != DictationSessionStatus.recording) {
+      return;
     }
-    _durationTimer?.cancel();
-    _stopwatch.stop();
-    _accumulatedDuration += _stopwatch.elapsed;
-    _stopwatch.reset();
+    await _stopActiveSegment();
+    await _mergeSegments();
+    await _updateMetrics();
     state = state.copyWith(
       status: DictationSessionStatus.paused,
       record: state.record?.copyWith(
         status: DictationSessionStatus.paused,
         duration: _accumulatedDuration,
+        fileSizeBytes: state.fileSizeBytes,
         updatedAt: DateTime.now().toUtc(),
+        segments: List<String>.from(_segmentPaths),
       ),
     );
   }
 
   Future<void> resumeRecording() async {
     if (!state.canResume) return;
-    await _recorder.resumeRecording();
+    try {
+      await _beginNewSegment();
+    } catch (error) {
+      state = state.copyWith(errorMessage: error.toString());
+      rethrow;
+    }
     _stopwatch
       ..reset()
       ..start();
@@ -109,6 +125,7 @@ class DictationController extends StateNotifier<DictationState> {
       record: state.record?.copyWith(
         status: DictationSessionStatus.recording,
         updatedAt: DateTime.now().toUtc(),
+        segments: List<String>.from(_segmentPaths),
       ),
     );
   }
@@ -119,17 +136,17 @@ class DictationController extends StateNotifier<DictationState> {
         state.status != DictationSessionStatus.holding) {
       return;
     }
-    final path = await _recorder.stopRecording() ?? state.filePath;
-    _stopwatch.stop();
-    _accumulatedDuration += _stopwatch.elapsed;
-    _stopwatch.reset();
-    _durationTimer?.cancel();
+    if (state.status == DictationSessionStatus.recording) {
+      await _stopActiveSegment();
+    }
+    await _mergeSegments();
     await _updateMetrics();
+    final finalPath = _finalFilePath ?? state.filePath;
     final duration = _accumulatedDuration;
-    final fileSize = await _safeFileSize(path);
+    final fileSize = await _safeFileSize(finalPath);
     state = state.copyWith(
       status: DictationSessionStatus.ready,
-      filePath: path,
+      filePath: finalPath,
       duration: duration,
       fileSizeBytes: fileSize,
       isHeld: false,
@@ -138,6 +155,7 @@ class DictationController extends StateNotifier<DictationState> {
         duration: duration,
         fileSizeBytes: fileSize,
         updatedAt: DateTime.now().toUtc(),
+        segments: List<String>.from(_segmentPaths),
       ),
     );
   }
@@ -203,12 +221,9 @@ class DictationController extends StateNotifier<DictationState> {
       return;
     }
     if (state.status == DictationSessionStatus.recording) {
-      await _recorder.pauseRecording();
+      await _stopActiveSegment();
     }
-    _durationTimer?.cancel();
-    _stopwatch.stop();
-    _accumulatedDuration += _stopwatch.elapsed;
-    _stopwatch.reset();
+    await _mergeSegments();
     await _updateMetrics();
     state = state.copyWith(
       status: DictationSessionStatus.holding,
@@ -220,6 +235,7 @@ class DictationController extends StateNotifier<DictationState> {
         status: DictationSessionStatus.holding,
         duration: _accumulatedDuration,
         updatedAt: DateTime.now().toUtc(),
+        segments: List<String>.from(_segmentPaths),
       ),
     );
     final dictationId = state.dictationId;
@@ -235,6 +251,7 @@ class DictationController extends StateNotifier<DictationState> {
         updatedAt: DateTime.now().toUtc(),
         sequenceNumber: state.record?.sequenceNumber ?? 0,
         tag: state.record?.tag ?? '',
+        segments: List<String>.from(_segmentPaths),
       );
       await _store.upsertHeld(held);
       _ref.read(heldDictationsProvider.notifier).refresh();
@@ -250,7 +267,29 @@ class DictationController extends StateNotifier<DictationState> {
       await _store.removeHeld(dictationId);
       _ref.read(heldDictationsProvider.notifier).refresh();
     }
-    await _recorder.resumeRecording();
+    try {
+      await _beginNewSegment();
+    } catch (error) {
+      final path = state.filePath;
+      if (dictationId != null && path != null) {
+        final fileSize = await _safeFileSize(path);
+        final held = HeldDictation(
+          id: dictationId,
+          filePath: path,
+          duration: _accumulatedDuration,
+          fileSizeBytes: fileSize,
+          createdAt: state.record?.createdAt ?? DateTime.now().toUtc(),
+          updatedAt: DateTime.now().toUtc(),
+          sequenceNumber: state.record?.sequenceNumber ?? 0,
+          tag: state.record?.tag ?? '',
+          segments: List<String>.from(_segmentPaths),
+        );
+        await _store.upsertHeld(held);
+        _ref.read(heldDictationsProvider.notifier).refresh();
+      }
+      state = state.copyWith(errorMessage: error.toString());
+      return;
+    }
     _stopwatch
       ..reset()
       ..start();
@@ -261,6 +300,7 @@ class DictationController extends StateNotifier<DictationState> {
       record: state.record?.copyWith(
         status: DictationSessionStatus.recording,
         updatedAt: DateTime.now().toUtc(),
+        segments: List<String>.from(_segmentPaths),
       ),
     );
   }
@@ -273,27 +313,27 @@ class DictationController extends StateNotifier<DictationState> {
       state = state.copyWith(errorMessage: 'Held dictation not found.');
       return;
     }
-    final dictationFile = File(held.filePath);
-    if (!await dictationFile.exists()) {
-      state = state.copyWith(errorMessage: 'Held file missing: ${held.filePath}');
-      return;
+    final segmentList = held.segments.isNotEmpty ? held.segments : [held.filePath];
+    for (final segmentPath in segmentList) {
+      if (!await File(segmentPath).exists()) {
+        state = state.copyWith(errorMessage: 'Held segment missing: $segmentPath');
+        return;
+      }
     }
+    _segmentPaths
+      ..clear()
+      ..addAll(segmentList);
+    _finalFilePath = held.filePath;
+    _activeSegmentPath = null;
+    await _mergeSegments();
     try {
-      await _recorder.resumeRecording();
+      await _beginNewSegment();
     } catch (error) {
       await _store.upsertHeld(held);
       unawaited(heldController.refresh());
-      _durationTimer?.cancel();
-      _stopwatch
-        ..stop()
-        ..reset();
       state = state.copyWith(
-        status: DictationSessionStatus.idle,
-        dictationId: null,
-        filePath: null,
-        duration: Duration.zero,
-        fileSizeBytes: 0,
-        clearRecord: true,
+        status: DictationSessionStatus.ready,
+        isHeld: false,
         errorMessage: 'Unable to resume the previous session. Start a new recording.',
       );
       return;
@@ -320,7 +360,7 @@ class DictationController extends StateNotifier<DictationState> {
         fileSizeBytes: held.fileSizeBytes,
         createdAt: held.createdAt,
         updatedAt: DateTime.now().toUtc(),
-        segments: [held.filePath],
+        segments: List<String>.from(_segmentPaths),
         sequenceNumber: held.sequenceNumber,
         tag: held.tag,
       ),
@@ -343,6 +383,12 @@ class DictationController extends StateNotifier<DictationState> {
         await file.delete();
       }
     }
+    for (final segment in List<String>.from(_segmentPaths)) {
+      await _deleteFileIfExists(segment);
+    }
+    _segmentPaths.clear();
+    _finalFilePath = null;
+    _activeSegmentPath = null;
     _durationTimer?.cancel();
     state = DictationState.initial();
   }
@@ -377,10 +423,13 @@ class DictationController extends StateNotifier<DictationState> {
   }
 
   Future<void> _updateMetrics() async {
-    final path = state.filePath;
+    final path = _finalFilePath ?? state.filePath;
     if (path == null) return;
     final duration = _accumulatedDuration + (_stopwatch.isRunning ? _stopwatch.elapsed : Duration.zero);
-    final size = await _safeFileSize(path);
+    var size = await _safeFileSize(path);
+    if (size == 0) {
+      size = await _totalSegmentSize();
+    }
     state = state.copyWith(
       duration: duration,
       fileSizeBytes: size,
@@ -388,8 +437,17 @@ class DictationController extends StateNotifier<DictationState> {
         duration: duration,
         fileSizeBytes: size,
         updatedAt: DateTime.now().toUtc(),
+        segments: List<String>.from(_segmentPaths),
       ),
     );
+  }
+
+  Future<int> _totalSegmentSize() async {
+    var total = 0;
+    for (final segment in _segmentPaths) {
+      total += await _safeFileSize(segment);
+    }
+    return total;
   }
 
   Future<int> _safeFileSize(String? path) async {
@@ -424,6 +482,92 @@ class DictationController extends StateNotifier<DictationState> {
     return buffer.toString();
   }
 
+  Future<void> _beginNewSegment() async {
+    final finalPath = _finalFilePath ?? state.filePath;
+    if (finalPath == null) {
+      throw StateError('No base file path available for dictation segments.');
+    }
+    final nextIndex = _segmentPaths.length + 1;
+    final segmentPath = _segmentPathForIndex(finalPath, nextIndex);
+    await _deleteFileIfExists(segmentPath);
+    _segmentPaths.add(segmentPath);
+    try {
+      await _recorder.startRecording(filePath: segmentPath);
+      _activeSegmentPath = segmentPath;
+    } catch (error) {
+      _segmentPaths.remove(segmentPath);
+      rethrow;
+    }
+  }
+
+  Future<void> _stopActiveSegment() async {
+    if (_activeSegmentPath == null) {
+      return;
+    }
+    try {
+      await _recorder.stopRecording();
+    } finally {
+      _durationTimer?.cancel();
+      _stopwatch.stop();
+      _accumulatedDuration += _stopwatch.elapsed;
+      _stopwatch.reset();
+      _activeSegmentPath = null;
+    }
+  }
+
+  Future<void> _mergeSegments() async {
+    final outputPath = _finalFilePath ?? state.filePath;
+    if (outputPath == null || _segmentPaths.isEmpty) {
+      return;
+    }
+    Uint8List? header;
+    final dataBuffers = <Uint8List>[];
+    var totalDataLength = 0;
+    for (final segmentPath in _segmentPaths) {
+      final file = File(segmentPath);
+      if (!await file.exists()) {
+        continue;
+      }
+      final bytes = await file.readAsBytes();
+      if (bytes.length < 44) {
+        continue;
+      }
+      header ??= Uint8List.fromList(bytes.sublist(0, 44));
+      final data = Uint8List.fromList(bytes.sublist(44));
+      totalDataLength += data.length;
+      dataBuffers.add(data);
+    }
+    if (header == null || totalDataLength == 0) {
+      await _deleteFileIfExists(outputPath);
+      return;
+    }
+    final headerView = ByteData.view(header.buffer);
+    headerView.setUint32(4, totalDataLength + 36, Endian.little);
+    headerView.setUint32(40, totalDataLength, Endian.little);
+    final builder = BytesBuilder(copy: false);
+    builder.add(header);
+    for (final buffer in dataBuffers) {
+      builder.add(buffer);
+    }
+    final outputFile = File(outputPath);
+    await outputFile.writeAsBytes(builder.takeBytes(), flush: true);
+  }
+
+  String _segmentPathForIndex(String finalPath, int index) {
+    final directory = p.dirname(finalPath);
+    final baseName = p.basenameWithoutExtension(finalPath);
+    final extension = p.extension(finalPath);
+    final suffix = index.toString().padLeft(2, '0');
+    return p.join(directory, '${baseName}_seg$suffix$extension');
+  }
+
+  Future<void> _deleteFileIfExists(String path) async {
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
   Future<void> _onQueueProcessed() async {
     await refreshQueueStatus();
     _notifyQueueChanged();
@@ -441,14 +585,17 @@ class DictationController extends StateNotifier<DictationState> {
       ..reset();
     _accumulatedDuration = Duration.zero;
     if (deleteFile) {
-      final path = state.filePath;
-      if (path != null) {
-        final file = File(path);
-        if (await file.exists()) {
-          await file.delete();
-        }
+      final finalPath = _finalFilePath ?? state.filePath;
+      if (finalPath != null) {
+        await _deleteFileIfExists(finalPath);
+      }
+      for (final segment in List<String>.from(_segmentPaths)) {
+        await _deleteFileIfExists(segment);
       }
     }
+    _segmentPaths.clear();
+    _finalFilePath = null;
+    _activeSegmentPath = null;
     state = state.copyWith(
       status: DictationSessionStatus.idle,
       dictationId: null,

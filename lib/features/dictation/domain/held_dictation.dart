@@ -10,6 +10,7 @@ class HeldDictation {
     required this.updatedAt,
     required this.sequenceNumber,
     required this.tag,
+    required this.segments,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class HeldDictation {
   final DateTime updatedAt;
   final int sequenceNumber;
   final String tag;
+  final List<String> segments;
 
   HeldDictation copyWith({
     Duration? duration,
@@ -28,6 +30,7 @@ class HeldDictation {
     DateTime? updatedAt,
     int? sequenceNumber,
     String? tag,
+    List<String>? segments,
   }) {
     return HeldDictation(
       id: id,
@@ -38,6 +41,7 @@ class HeldDictation {
       updatedAt: updatedAt ?? this.updatedAt,
       sequenceNumber: sequenceNumber ?? this.sequenceNumber,
       tag: tag ?? this.tag,
+      segments: segments ?? List<String>.from(this.segments),
     );
   }
 
@@ -50,9 +54,16 @@ class HeldDictation {
         'updatedAt': updatedAt.toIso8601String(),
         'sequenceNumber': sequenceNumber,
         'tag': tag,
+        'segments': segments,
       };
 
   factory HeldDictation.fromJson(Map<String, dynamic> json) {
+    final rawSegments = (json['segments'] as List<dynamic>? ?? const [])
+        .map((dynamic e) => e as String)
+        .toList(growable: false);
+    final segments = rawSegments.isNotEmpty
+        ? rawSegments
+        : <String>[json['filePath'] as String];
     return HeldDictation(
       id: json['id'] as String,
       filePath: json['filePath'] as String,
@@ -62,6 +73,7 @@ class HeldDictation {
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       sequenceNumber: json['sequenceNumber'] as int? ?? 0,
       tag: json['tag'] as String? ?? '',
+      segments: segments,
     );
   }
 

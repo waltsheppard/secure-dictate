@@ -32,6 +32,12 @@ class HeldDictationsController extends StateNotifier<AsyncValue<List<HeldDictati
       if (await file.exists()) {
         await file.delete();
       }
+      for (final segment in removed.segments) {
+        final segmentFile = File(segment);
+        if (await segmentFile.exists()) {
+          await segmentFile.delete();
+        }
+      }
     }
     await refresh();
   }
