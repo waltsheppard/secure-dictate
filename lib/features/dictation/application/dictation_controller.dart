@@ -540,7 +540,7 @@ class DictationController extends StateNotifier<DictationState> {
     if (outputPath == null || _segmentPaths.isEmpty) {
       return;
     }
-    Uint8List? header;
+    _WavSegment? baseSegment;
     final dataBuffers = <Uint8List>[];
     var totalDataLength = 0;
     for (final segmentPath in _segmentPaths) {
@@ -549,21 +549,29 @@ class DictationController extends StateNotifier<DictationState> {
         continue;
       }
       final bytes = await file.readAsBytes();
-      if (bytes.length < 44) {
+      _WavSegment segment;
+      try {
+        segment = _parseWavSegment(bytes);
+      } on FormatException catch (error) {
+        debugPrint('Skipping invalid WAV segment $segmentPath: $error');
         continue;
       }
-      header ??= Uint8List.fromList(bytes.sublist(0, 44));
-      final data = Uint8List.fromList(bytes.sublist(44));
-      totalDataLength += data.length;
-      dataBuffers.add(data);
+      baseSegment ??= segment;
+      totalDataLength += segment.data.length;
+      dataBuffers.add(segment.data);
     }
-    if (header == null || totalDataLength == 0) {
+    if (baseSegment == null || totalDataLength == 0) {
       await _deleteFileIfExists(outputPath);
       return;
     }
+    final header = Uint8List.fromList(baseSegment.header);
     final headerView = ByteData.view(header.buffer);
-    headerView.setUint32(4, totalDataLength + 36, Endian.little);
-    headerView.setUint32(40, totalDataLength, Endian.little);
+    headerView.setUint32(4, header.length - 8 + totalDataLength, Endian.little);
+    headerView.setUint32(
+      baseSegment.dataSizeFieldOffset,
+      totalDataLength,
+      Endian.little,
+    );
     final builder = BytesBuilder(copy: false);
     builder.add(header);
     for (final buffer in dataBuffers) {
@@ -586,6 +594,39 @@ class DictationController extends StateNotifier<DictationState> {
     if (await file.exists()) {
       await file.delete();
     }
+  }
+
+  _WavSegment _parseWavSegment(Uint8List bytes) {
+    if (bytes.length < 12) {
+      throw const FormatException('Header too short');
+    }
+    final data = ByteData.sublistView(bytes);
+    var offset = 12;
+    while (offset + 8 <= bytes.length) {
+      final chunkId = String.fromCharCodes(bytes.sublist(offset, offset + 4));
+      final chunkSize = data.getUint32(offset + 4, Endian.little);
+      final chunkDataStart = offset + 8;
+      if (chunkDataStart + chunkSize > bytes.length) {
+        throw const FormatException('Chunk extends beyond file');
+      }
+      if (chunkId == 'data') {
+        final header = Uint8List.fromList(bytes.sublist(0, chunkDataStart));
+        final chunkData = Uint8List.fromList(
+          bytes.sublist(chunkDataStart, chunkDataStart + chunkSize),
+        );
+        final dataSizeFieldOffset = chunkDataStart - 4;
+        return _WavSegment(
+          header: header,
+          data: chunkData,
+          dataSizeFieldOffset: dataSizeFieldOffset,
+        );
+      }
+      offset = chunkDataStart + chunkSize;
+      if (chunkSize.isOdd) {
+        offset += 1;
+      }
+    }
+    throw const FormatException('Missing data chunk');
   }
 
   Future<void> _onQueueProcessed() async {
@@ -636,6 +677,18 @@ class DictationController extends StateNotifier<DictationState> {
     _stopwatch.stop();
     super.dispose();
   }
+}
+
+class _WavSegment {
+  const _WavSegment({
+    required this.header,
+    required this.data,
+    required this.dataSizeFieldOffset,
+  });
+
+  final Uint8List header;
+  final Uint8List data;
+  final int dataSizeFieldOffset;
 }
 
 final dictationControllerProvider =
