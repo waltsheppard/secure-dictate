@@ -30,13 +30,13 @@ class JustAudioDictationPlayer implements DictationPlayer {
     _sessionInit ??= () async {
       final session = await AudioSession.instance;
       await session.configure(
-        const AudioSessionConfiguration(
+        AudioSessionConfiguration(
           avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
           avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.allowBluetooth |
               AVAudioSessionCategoryOptions.defaultToSpeaker |
               AVAudioSessionCategoryOptions.mixWithOthers,
           avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-          androidAudioAttributes: AndroidAudioAttributes(
+          androidAudioAttributes: const AndroidAudioAttributes(
             contentType: AndroidAudioContentType.speech,
             usage: AndroidAudioUsage.voiceCommunication,
           ),
