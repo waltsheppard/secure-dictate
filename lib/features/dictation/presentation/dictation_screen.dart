@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../dictation.dart';
@@ -61,48 +62,95 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
     final playerController = ref.read(
       dictationPlayerControllerProvider.notifier,
     );
+    final uploadsState = ref.watch(uploadsControllerProvider);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _RecordButton(
-            state: dictationState,
-            onRecord: dictationController.startRecording,
-            onPause: dictationController.pauseRecording,
-            onResume: dictationController.resumeRecording,
-          ),
-          const SizedBox(height: 24),
-          _RecordingStatus(state: dictationState),
-          const SizedBox(height: 24),
-          _TagField(
-            controller: _tagController,
-            enabled: dictationState.record != null,
-          ),
-          const SizedBox(height: 24),
-          _PlaybackCard(
-            dictationState: dictationState,
-            playerState: playerState,
-            onPlay: playerController.play,
-            onPause: playerController.pause,
-            onSeek: playerController.seek,
-            onLoad: playerController.load,
-          ),
-          const SizedBox(height: 24),
-          _ActionButtons(
-            state: dictationState,
-            onSubmit: dictationController.submitCurrent,
-            onHold: dictationController.holdCurrent,
-            onResumeHeld: dictationController.resumeHeld,
-            onDelete: dictationController.deleteCurrent,
-          ),
-          if (dictationState.errorMessage != null) ...[
-            const SizedBox(height: 24),
-            _ErrorBanner(message: dictationState.errorMessage!),
-          ],
-        ],
+    final controlWidgets = <Widget>[
+      _RecordButton(
+        state: dictationState,
+        onRecord: dictationController.startRecording,
+        onPause: dictationController.pauseRecording,
+        onResume: dictationController.resumeRecording,
       ),
+      const SizedBox(height: 16),
+      _SessionCard(
+        state: dictationState,
+        tagController: _tagController,
+        tagEnabled: dictationState.record != null,
+      ),
+      if (dictationState.isHeld || dictationState.status == DictationSessionStatus.holding) ...[
+        const SizedBox(height: 16),
+        _HeldBanner(state: dictationState),
+      ],
+      const SizedBox(height: 16),
+      _ActionButtons(
+        state: dictationState,
+        onSubmit: dictationController.submitCurrent,
+        onHold: dictationController.holdCurrent,
+        onResumeHeld: dictationController.resumeHeld,
+        onDelete: dictationController.deleteCurrent,
+      ),
+    ];
+
+    final playbackWidgets = <Widget>[
+      _PlaybackCard(
+        dictationState: dictationState,
+        playerState: playerState,
+        onPlay: playerController.play,
+        onPause: playerController.pause,
+        onSeek: playerController.seek,
+        onLoad: playerController.load,
+      ),
+      const SizedBox(height: 16),
+      _UploadsSummary(
+        state: uploadsState,
+        onOpen: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const UploadsScreen()),
+          );
+        },
+        onRetry: () => ref.read(uploadsControllerProvider.notifier).refresh(),
+      ),
+      if (dictationState.errorMessage != null) ...[
+        const SizedBox(height: 16),
+        _ErrorBanner(message: dictationState.errorMessage!),
+      ],
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 840;
+        final content = isWide
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [...controlWidgets],
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [...playbackWidgets],
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...controlWidgets,
+                  const SizedBox(height: 24),
+                  ...playbackWidgets,
+                ],
+              );
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: content,
+        );
+      },
     );
   }
 
@@ -137,29 +185,6 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
     }
   }
 }
-
-class _TagField extends StatelessWidget {
-  const _TagField({required this.controller, required this.enabled});
-
-  final TextEditingController controller;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      enabled: enabled,
-      maxLength: 12,
-      decoration: const InputDecoration(
-        labelText: 'Dictation tag',
-        helperText: 'Up to 12 characters',
-        counterText: '',
-        border: OutlineInputBorder(),
-      ),
-    );
-  }
-}
-
 class _RecordButton extends StatelessWidget {
   const _RecordButton({
     required this.state,
@@ -178,31 +203,36 @@ class _RecordButton extends StatelessWidget {
     final Color backgroundColor;
     final IconData icon;
     final String label;
-    void Function()? onPressed;
+    Future<void> Function()? action;
 
     switch (state.status) {
       case DictationSessionStatus.recording:
         backgroundColor = Colors.red;
         icon = Icons.pause;
         label = 'Pause';
-        onPressed = () => unawaited(onPause());
+        action = onPause;
         break;
       case DictationSessionStatus.paused:
         backgroundColor = Theme.of(context).colorScheme.primary;
         icon = Icons.mic;
         label = 'Resume';
-        onPressed = () => unawaited(onResume());
+        action = onResume;
         break;
       default:
         backgroundColor = Theme.of(context).colorScheme.primary;
         icon = Icons.mic;
         label = 'Record';
-        onPressed = state.canRecord ? () => unawaited(onRecord()) : null;
+        action = state.canRecord ? onRecord : null;
         break;
     }
 
     return ElevatedButton.icon(
-      onPressed: onPressed,
+      onPressed: action == null
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              unawaited(action!());
+            },
       icon: Icon(icon, size: 32),
       label: Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
@@ -220,10 +250,16 @@ class _RecordButton extends StatelessWidget {
   }
 }
 
-class _RecordingStatus extends StatelessWidget {
-  const _RecordingStatus({required this.state});
+class _SessionCard extends StatelessWidget {
+  const _SessionCard({
+    required this.state,
+    required this.tagController,
+    required this.tagEnabled,
+  });
 
   final DictationState state;
+  final TextEditingController tagController;
+  final bool tagEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -233,8 +269,7 @@ class _RecordingStatus extends StatelessWidget {
         record != null && record.sequenceNumber > 0
             ? '#${record.sequenceNumber.toString().padLeft(6, '0')}'
             : 'Unnumbered';
-    final tagLabel =
-        record != null && record.tag.isNotEmpty ? record.tag : 'N/A';
+    final tagValue = record?.tag ?? '';
     return Card(
       elevation: 0,
       color: theme.colorScheme.surfaceContainerHighest,
@@ -243,11 +278,20 @@ class _RecordingStatus extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '$sequenceLabel • $tagLabel',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Current dictation',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  sequenceLabel,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             Text(
@@ -256,7 +300,20 @@ class _RecordingStatus extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
+            TextField(
+              controller: tagController,
+              enabled: tagEnabled,
+              maxLength: 12,
+              decoration: InputDecoration(
+                labelText: 'Dictation tag',
+                hintText: tagEnabled ? 'Enter up to 12 characters' : (tagValue.isEmpty ? 'No tag' : null),
+                helperText: 'Optional identifier shared with uploads',
+                counterText: '',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -325,6 +382,125 @@ class _RecordingStatus extends StatelessWidget {
       unitIndex++;
     }
     return '${value.toStringAsFixed(1)} ${units[unitIndex]}';
+  }
+}
+
+class _HeldBanner extends StatelessWidget {
+  const _HeldBanner({required this.state});
+
+  final DictationState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final record = state.record;
+    final label = record?.tag.isNotEmpty == true ? record!.tag : 'Untitled';
+    return Card(
+      color: Theme.of(context).colorScheme.tertiaryContainer,
+      child: ListTile(
+        leading: Icon(
+          Icons.pause_circle_filled,
+          color: Theme.of(context).colorScheme.onTertiaryContainer,
+        ),
+        title: const Text('Held dictation ready to resume'),
+        subtitle: Text(
+          record == null
+              ? 'Tap Resume to continue recording.'
+              : '#${record.sequenceNumber.toString().padLeft(6, '0')} • $label',
+        ),
+      ),
+    );
+  }
+}
+
+class _UploadsSummary extends StatelessWidget {
+  const _UploadsSummary({
+    required this.state,
+    required this.onOpen,
+    required this.onRetry,
+  });
+
+  final AsyncValue<UploadsState> state;
+  final VoidCallback onOpen;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return state.when(
+      data: (value) {
+        final unsentCount = value.unsent.length;
+        final title = unsentCount == 0
+            ? 'All uploads sent'
+            : unsentCount == 1
+                ? '1 dictation awaiting upload'
+                : '$unsentCount dictations awaiting upload';
+        final lastSent = value.recent.isNotEmpty
+            ? 'Last sent ${TimeOfDay.fromDateTime((value.recent.first.uploadedAt ?? value.recent.first.updatedAt).toLocal()).format(context)}'
+            : 'No recent uploads';
+        final icon = unsentCount == 0
+            ? Icons.cloud_done_outlined
+            : Icons.cloud_upload_outlined;
+        return Card(
+          elevation: 0,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: ListTile(
+            leading: Icon(icon),
+            title: Text(title),
+            subtitle: Text(lastSent),
+            trailing: FilledButton.tonalIcon(
+              onPressed: onOpen,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('View uploads'),
+            ),
+          ),
+        );
+      },
+      loading: () => Card(
+        elevation: 0,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const ListTile(
+          leading: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          title: Text('Checking uploads…'),
+        ),
+      ),
+      error: (error, _) => Card(
+        elevation: 0,
+        color: Theme.of(context).colorScheme.errorContainer,
+        child: ListTile(
+          leading: Icon(
+            Icons.error_outline,
+            color: Theme.of(context).colorScheme.onErrorContainer,
+          ),
+          title: Text(
+            'Uploads unavailable',
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(color: Theme.of(context).colorScheme.onErrorContainer),
+          ),
+          subtitle: Text(
+            error.toString(),
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: Theme.of(context).colorScheme.onErrorContainer),
+          ),
+          trailing: TextButton(
+            onPressed: onRetry,
+            child: Text(
+              'Retry',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+            ),
+          ),
+          onTap: onRetry,
+        ),
+      ),
+    );
   }
 }
 
@@ -468,10 +644,12 @@ class _ActionButtons extends StatelessWidget {
           child: FilledButton.icon(
             icon: const Icon(Icons.cloud_upload),
             label: const Text('Submit'),
-            onPressed:
-                state.canSubmit
-                    ? () => unawaited(onSubmit(metadata: const {}))
-                    : null,
+            onPressed: state.canSubmit
+                ? () {
+                    HapticFeedback.lightImpact();
+                    unawaited(onSubmit(metadata: const {}));
+                  }
+                : null,
           ),
         ),
         const SizedBox(width: 12),
@@ -479,10 +657,12 @@ class _ActionButtons extends StatelessWidget {
           child: OutlinedButton.icon(
             icon: Icon(isHeld ? Icons.play_circle : Icons.pause_circle),
             label: Text(isHeld ? 'Resume Recording' : 'Hold'),
-            onPressed:
-                canToggleHold
-                    ? () => unawaited(isHeld ? onResumeHeld() : onHold())
-                    : null,
+            onPressed: canToggleHold
+                ? () {
+                    HapticFeedback.selectionClick();
+                    unawaited(isHeld ? onResumeHeld() : onHold());
+                  }
+                : null,
           ),
         ),
         const SizedBox(width: 12),
@@ -520,6 +700,7 @@ class _ActionButtons extends StatelessWidget {
           ),
     );
     if (confirmed == true) {
+      HapticFeedback.heavyImpact();
       unawaited(onDelete());
     }
   }
