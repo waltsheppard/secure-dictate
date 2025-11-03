@@ -159,6 +159,7 @@ class DictationController extends StateNotifier<DictationState> {
         segments: List<String>.from(_segmentPaths),
       ),
     );
+    _notifyPlaybackUpdate();
   }
 
   Future<void> submitCurrent({Map<String, dynamic> metadata = const {}}) async {
@@ -260,6 +261,7 @@ class DictationController extends StateNotifier<DictationState> {
       await _store.upsertHeld(held);
       _ref.read(heldDictationsProvider.notifier).refresh();
     }
+    _notifyPlaybackUpdate();
     await _resetCurrentRecording(deleteFile: false);
   }
 
@@ -374,6 +376,7 @@ class DictationController extends StateNotifier<DictationState> {
         tag: held.tag,
       ),
     );
+    _notifyPlaybackUpdate();
   }
 
   Future<void> deleteCurrent() async {
@@ -400,6 +403,11 @@ class DictationController extends StateNotifier<DictationState> {
     _activeSegmentPath = null;
     _durationTimer?.cancel();
     state = DictationState.initial();
+  }
+
+  void _notifyPlaybackUpdate() {
+    // Trigger listeners that rely on updated duration/size to refresh playback.
+    state = state.copyWith(duration: state.duration);
   }
 
   Future<void> refreshQueueStatus() async {

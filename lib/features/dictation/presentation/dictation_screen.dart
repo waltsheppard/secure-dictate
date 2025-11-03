@@ -31,16 +31,6 @@ class _DictationBodyState extends ConsumerState<DictationBody> {
       final player = ref.read(dictationPlayerControllerProvider.notifier);
       final previousPath = previous?.filePath;
       final canPlayNow = next.filePath != null && next.canPlayback;
-      final couldPlayBefore =
-          previousPath != null &&
-          previous?.canPlayback == true &&
-          previousPath == next.filePath;
-      final fileChanged =
-          previous?.fileSizeBytes != next.fileSizeBytes ||
-          previous?.duration != next.duration;
-      if (canPlayNow && (!couldPlayBefore || fileChanged)) {
-        unawaited(player.load(next.filePath!));
-      }
       if (!canPlayNow &&
           previousPath != null &&
           previous?.canPlayback == true) {
@@ -345,17 +335,16 @@ class _PlaybackCard extends StatelessWidget {
                     !canInteract
                         ? null
                         : () async {
+                          if (playerState.isPlaying) {
+                            await onPause();
+                            return;
+                          }
                           final currentPath = dictationState.filePath;
-                          if (currentPath != null &&
-                              currentPath != playerState.filePath) {
+                          if (currentPath != null) {
                             await onLoad(currentPath);
                             await onSeek(Duration.zero);
                           }
-                          if (playerState.isPlaying) {
-                            await onPause();
-                          } else {
-                            await onPlay();
-                          }
+                          await onPlay();
                         },
                 icon: Icon(
                   playerState.isPlaying ? Icons.pause : Icons.play_arrow,
